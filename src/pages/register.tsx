@@ -1,4 +1,8 @@
-import { useState, ChangeEvent, FormEvent } from 'react'
+import { useState, type ChangeEvent, type FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
+import StoreLogo from '../components/StoreLogo'
+import { registerCustomer } from '../utils/authStorage'
+import '../styles/auth.css'
 
 interface RegisterForm {
   name: string
@@ -8,13 +12,11 @@ interface RegisterForm {
   password: string
 }
 
-interface RegisterPageProps {
-  onBackToLogin: () => void
-}
-
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const phoneRegex = /^[\d\s\-+()]{10,15}$/
 
-export default function RegisterPage({ onBackToLogin }: RegisterPageProps) {
+export default function RegisterPage() {
+  const navigate = useNavigate()
   const [form, setForm] = useState<RegisterForm>({
     name: '',
     email: '',
@@ -23,157 +25,112 @@ export default function RegisterPage({ onBackToLogin }: RegisterPageProps) {
     password: ''
   })
   const [errors, setErrors] = useState<Partial<RegisterForm>>({})
+  const [submitError, setSubmitError] = useState('')
+  const [success, setSuccess] = useState('')
 
-  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setForm((current) => ({ ...current, [name]: value } as RegisterForm))
+    setSubmitError('')
+    setSuccess('')
   }
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const nextErrors: Partial<RegisterForm> = {}
 
-    if (!form.name) nextErrors.name = 'Name is required.'
-    if (!form.email) nextErrors.email = 'Email is required.'
+    if (!form.name.trim()) nextErrors.name = 'Name is required.'
+    if (!form.email.trim()) nextErrors.email = 'Email is required.'
     else if (!emailRegex.test(form.email)) nextErrors.email = 'Enter a valid email.'
-    if (!form.phone) nextErrors.phone = 'Phone number is required.'
-    if (!form.address) nextErrors.address = 'Address is required.'
+
+    if (!form.phone.trim()) nextErrors.phone = 'Phone number is required.'
+    else if (!phoneRegex.test(form.phone.replace(/\s/g, '')))
+      nextErrors.phone = 'Enter a valid phone number (10–15 digits).'
+
+    if (!form.address.trim()) nextErrors.address = 'Address is required.'
+
     if (!form.password) nextErrors.password = 'Password is required.'
     else if (form.password.length < 6)
       nextErrors.password = 'Password must be at least 6 characters.'
 
     setErrors(nextErrors)
+    setSubmitError('')
+    setSuccess('')
 
-    if (Object.keys(nextErrors).length === 0) {
-      alert('Registration successful (mock). Please login.')
-      onBackToLogin()
+    if (Object.keys(nextErrors).length > 0) return
+
+    const result = registerCustomer({
+      name: form.name.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      address: form.address.trim(),
+      password: form.password
+    })
+
+    if (result.ok === false) {
+      setSubmitError(result.message)
+      return
     }
+
+    setSuccess('Registration successful! You can now login with your email and password.')
+    setForm({ name: '', email: '', phone: '', address: '', password: '' })
+    setTimeout(() => navigate('/customer/login'), 1500)
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 24,
-        background: 'linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)'
-      }}
-    >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: 500,
-          background: '#ffffff',
-          borderRadius: 18,
-          boxShadow: '0 18px 45px rgba(15,23,42,0.12)',
-          padding: 32
-        }}
-      >
-        <h1 style={{ margin: 0, marginBottom: 10, textAlign: 'center' }}>Create Account</h1>
-        <p style={{ color: '#475569', textAlign: 'center', marginTop: 0, marginBottom: 24 }}>
-          Register as a customer to place grocery orders.
-        </p>
+    <div className="auth-page">
+      <div className="auth-topbar">
+        <StoreLogo onClick={() => navigate('/')} />
+      </div>
 
-        <form onSubmit={handleSubmit} noValidate>
-          <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }} htmlFor="name">
-            Name
-          </label>
-          <input
-            id="name"
-            name="name"
-            type="text"
-            value={form.name}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1px solid #cbd5e1', marginBottom: errors.name ? 6 : 18 }}
-          />
-          {errors.name && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 18 }}>{errors.name}</div>}
+      <div className="auth-page-body">
+        <div className="auth-layout">
+          <aside className="auth-side">
+            <h2>Join FreshMart</h2>
+            <p>Create your account and start ordering farm-fresh groceries with fast doorstep delivery.</p>
+          </aside>
 
-          <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }} htmlFor="email">
-            Email
-          </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            value={form.email}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1px solid #cbd5e1', marginBottom: errors.email ? 6 : 18 }}
-          />
-          {errors.email && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 18 }}>{errors.email}</div>}
+          <div className="auth-card">
+            <h1 className="auth-title">Create account</h1>
+            <p className="auth-subtitle">Fill in your details to get started.</p>
 
-          <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }} htmlFor="phone">
-            Phone Number
-          </label>
-          <input
-            id="phone"
-            name="phone"
-            type="tel"
-            value={form.phone}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1px solid #cbd5e1', marginBottom: errors.phone ? 6 : 18 }}
-          />
-          {errors.phone && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 18 }}>{errors.phone}</div>}
+            {submitError && <div className="auth-alert auth-alert--error">{submitError}</div>}
+            {success && <div className="auth-alert auth-alert--success">{success}</div>}
 
-          <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }} htmlFor="address">
-            Address
-          </label>
-          <input
-            id="address"
-            name="address"
-            type="text"
-            value={form.address}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1px solid #cbd5e1', marginBottom: errors.address ? 6 : 18 }}
-          />
-          {errors.address && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 18 }}>{errors.address}</div>}
+            <form className="auth-form" onSubmit={handleSubmit} noValidate>
+              <div className="auth-field">
+                <label className="auth-label" htmlFor="name">Name</label>
+                <input id="name" name="name" type="text" placeholder="Your name" className={`auth-input${errors.name ? ' auth-input--error' : ''}`} value={form.name} onChange={handleChange} autoComplete="name" />
+                {errors.name && <p className="auth-error">{errors.name}</p>}
+              </div>
+              <div className="auth-field">
+                <label className="auth-label" htmlFor="email">Email</label>
+                <input id="email" name="email" type="email" placeholder="you@email.com" className={`auth-input${errors.email ? ' auth-input--error' : ''}`} value={form.email} onChange={handleChange} autoComplete="email" />
+                {errors.email && <p className="auth-error">{errors.email}</p>}
+              </div>
+              <div className="auth-field">
+                <label className="auth-label" htmlFor="phone">Phone</label>
+                <input id="phone" name="phone" type="tel" placeholder="9876543210" className={`auth-input${errors.phone ? ' auth-input--error' : ''}`} value={form.phone} onChange={handleChange} autoComplete="tel" />
+                {errors.phone && <p className="auth-error">{errors.phone}</p>}
+              </div>
+              <div className="auth-field">
+                <label className="auth-label" htmlFor="address">Address</label>
+                <textarea id="address" name="address" rows={2} placeholder="Delivery address" className={`auth-input${errors.address ? ' auth-input--error' : ''}`} value={form.address} onChange={handleChange} autoComplete="street-address" style={{ resize: 'vertical', minHeight: 72 }} />
+                {errors.address && <p className="auth-error">{errors.address}</p>}
+              </div>
+              <div className="auth-field">
+                <label className="auth-label" htmlFor="password">Password</label>
+                <input id="password" name="password" type="password" placeholder="Min. 6 characters" className={`auth-input${errors.password ? ' auth-input--error' : ''}`} value={form.password} onChange={handleChange} autoComplete="new-password" />
+                {errors.password && <p className="auth-error">{errors.password}</p>}
+              </div>
+              <button type="submit" className="auth-submit">Sign Up</button>
+            </form>
 
-          <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }} htmlFor="password">
-            Password
-          </label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            value={form.password}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1px solid #cbd5e1', marginBottom: errors.password ? 6 : 22 }}
-          />
-          {errors.password && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 22 }}>{errors.password}</div>}
-
-          <button
-            type="submit"
-            style={{
-              width: '100%',
-              padding: '12px',
-              borderRadius: 12,
-              border: 'none',
-              background: '#2563eb',
-              color: '#fff',
-              fontWeight: 700,
-              cursor: 'pointer'
-            }}
-          >
-            Register
-          </button>
-        </form>
-
-        <div style={{ marginTop: 20, textAlign: 'center', color: '#475569' }}>
-          Already have an account?{' '}
-          <button
-            type="button"
-            onClick={onBackToLogin}
-            style={{
-              border: 'none',
-              background: 'transparent',
-              color: '#2563eb',
-              cursor: 'pointer',
-              fontWeight: 700
-            }}
-          >
-            Login
-          </button>
+            <div className="auth-footer">
+              Already have an account?{' '}
+              <button type="button" className="auth-link" onClick={() => navigate('/customer/login')}>Sign in</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
