@@ -1,5 +1,8 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
-import { ORDER_STATUSES, type OrderItem, type SubmittedOrder } from '../types/order'
+import { getSession, type Customer } from '../utils/authStorage'
+import { addOrder } from '../utils/storeStorage'
+import type { OrderItem, SubmittedOrder } from '../types/order'
+import { ORDER_STATUSES } from '../types/order'
 
 interface OrderContextValue {
   draftItems: OrderItem[]
@@ -21,11 +24,28 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const submitOrder = () => {
     if (draftItems.length === 0) return null
 
+    const session = getSession()
+    if (!session || session.role !== 'customer') return null
+
+    const customer = session.user as Customer
+
+    const storeOrder = addOrder({
+      customerEmail: customer.email,
+      customerName: customer.name,
+      customerPhone: customer.phone,
+      customerAddress: customer.address,
+      items: draftItems.map(({ itemName, quantity, measurement }) => ({
+        itemName,
+        quantity,
+        measurement
+      }))
+    })
+
     const order: SubmittedOrder = {
-      id: Date.now(),
+      id: storeOrder.id,
       items: [...draftItems],
       status: ORDER_STATUSES[0],
-      submittedAt: new Date().toLocaleString()
+      submittedAt: storeOrder.submittedAt
     }
 
     setSubmittedOrders((prev) => [...prev, order])

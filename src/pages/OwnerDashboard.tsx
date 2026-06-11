@@ -1,49 +1,406 @@
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import StoreNavbar from '../components/StoreNavbar'
 import { getSession, type Owner } from '../utils/authStorage'
+import {
+  approveOrder,
+  checkOrderStock,
+  deleteProduct,
+  getDeliveries,
+  getOrders,
+  getProducts,
+  rejectOrder,
+  saveProduct,
+  sendToDelivery,
+  updateProduct
+} from '../utils/storeStorage'
+import type { DeliveryAssignment, Product, StoreOrder } from '../types/store'
 import '../styles/dashboard.css'
+import '../styles/owner-dashboard.css'
+
+type OwnerTab = 'stock' | 'orders' | 'delivery'
 
 export default function OwnerDashboard() {
   const session = getSession()
+  const [tab, setTab] = useState<OwnerTab>('stock')
+  const [products, setProducts] = useState<Product[]>([])
+  const [orders, setOrders] = useState<StoreOrder[]>([])
+  const [deliveries, setDeliveries] = useState<DeliveryAssignment[]>([])
+  const [toast, setToast] = useState('')
+
+  const [productForm, setProductForm] = useState({ name: '', stock: '', price: '', unit: 'kg' })
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectingOrderId, setRejectingOrderId] = useState<number | null>(null)
+
+  const refresh = useCallback(() => {
+    setProducts(getProducts())
+    setOrders(getOrders())
+    setDeliveries(getDeliveries())
+  }, [])
+
+  useEffect(() => {
+    refresh()
+  }, [refresh])
+
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(''), 3500)
+    return () => clearTimeout(t)
+  }, [toast])
 
   if (!session || session.role !== 'owner') {
     return <Navigate to="/owner/login" replace />
   }
 
   const owner = session.user as Owner
+  const pendingOrders = orders.filter((o) => o.status === 'pending')
+  const approvedOrders = orders.filter((o) => o.status === 'approved')
+  const sentOrders = orders.filter((o) => o.status === 'sent_to_delivery')
+
+  const handleSaveProduct = (e: FormEvent) => {
+    e.preventDefault()
+    const stock = Number(productForm.stock)
+    const price = Number(productForm.price)
+    if (!productForm.name.trim() || stock < 0 || price <= 0) return
+
+    if (editingId) {
+      updateProduct(editingId, {
+        name: productForm.name.trim(),
+        stock,
+        price,
+        unit: productForm.unit
+      })
+      setEditingId(null)
+      setToast('Product updated for today.')
+    } else {
+      saveProduct({ name: productForm.name.trim(), stock, price, unit: productForm.unit })
+      setToast('Product added to morning stock.')
+    }
+    setProductForm({ name: '', stock: '', price: '', unit: 'kg' })
+    refresh()
+  }
+
+  const startEdit = (p: Product) => {
+    setEditingId(p.id)
+    setProductForm({ name: p.name, stock: String(p.stock), price: String(p.price), unit: p.unit })
+    setTab('stock')
+  }
+
+  const handleApprove = (orderId: number) => {
+    const result = approveOrder(orderId)
+    if (result.ok === false) {
+      const order = orders.find((o) => o.id === orderId)
+      if (order) {
+        const reason = result.message
+        rejectOrder(orderId, `Sorry, your order could not be fulfilled: ${reason}`)
+        setToast('Stock unavailable — customer notified.')
+      }
+      refresh()
+      return
+    }
+    setToast(`Order #${orderId} approved. Bill: ₹${result.order.billAmount}`)
+    refresh()
+  }
+
+  const handleReject = () => {
+    if (!rejectingOrderId || !rejectReason.trim()) return
+    rejectOrder(rejectingOrderId, rejectReason.trim())
+    setRejectingOrderId(null)
+    setRejectReason('')
+    setToast('Order rejected — customer will receive a notification.')
+    refresh()
+  }
+
+  const handleSendDelivery = (orderId: number) => {
+    const assignment = sendToDelivery(orderId)
+    if (assignment) {
+      setToast(`Order #${orderId} reported to delivery partner.`)
+      refresh()
+    }
+  }
 
   return (
     <div className="dashboard">
       <StoreNavbar userLabel={`${owner.name} · Owner`} />
 
+      {toast && <div className="owner-toast">{toast}</div>}
+
       <div className="dashboard-inner">
-        <section className="store-hero store-hero--compact">
+        <section className="store-hero store-hero--compact owner-hero">
           <div className="store-hero__bg" aria-hidden="true">🏪</div>
           <div className="store-hero__content">
-            <span className="store-hero__badge">Store Admin</span>
-            <h1 className="store-hero__title store-hero__title--compact">Dashboard</h1>
-            <p className="store-hero__desc">Welcome back, {owner.name}. Here&apos;s your store at a glance.</p>
+            <span className="store-hero__badge">Good morning, {owner.name}</span>
+            <h1 className="store-hero__title store-hero__title--compact">Store Control Panel</h1>
+            <p className="store-hero__desc">
+              Update morning stock, review customer orders, generate bills, and dispatch to delivery.
+            </p>
           </div>
         </section>
 
-        <section className="store-section">
-          <h2 className="store-section__title">Overview</h2>
-          <div className="owner-grid">
-            <div className="stat-card">
-              <h3>Products</h3>
-              <p>12</p>
-            </div>
-            <div className="stat-card stat-card--blue">
-              <h3>Pending Orders</h3>
-              <p>5</p>
-            </div>
-            <div className="stat-card stat-card--orange">
-              <h3>Customers</h3>
-              <p>28</p>
+        <div className="owner-stats">
+          <div className="stat-card">
+            <h3>Products in stock</h3>
+            <p>{products.length}</p>
+          </div>
+          <div className="stat-card stat-card--blue">
+            <h3>Pending orders</h3>
+            <p>{pendingOrders.length}</p>
+          </div>
+          <div className="stat-card stat-card--orange">
+            <h3>Awaiting delivery</h3>
+            <p>{approvedOrders.length + sentOrders.length}</p>
+          </div>
+        </div>
+
+        <nav className="owner-tabs" aria-label="Owner sections">
+          <button type="button" className={`owner-tab${tab === 'stock' ? ' owner-tab--active' : ''}`} onClick={() => setTab('stock')}>
+            🌅 Morning Stock
+          </button>
+          <button type="button" className={`owner-tab${tab === 'orders' ? ' owner-tab--active' : ''}`} onClick={() => setTab('orders')}>
+            📦 Order Requests {pendingOrders.length > 0 && <span className="owner-badge">{pendingOrders.length}</span>}
+          </button>
+          <button type="button" className={`owner-tab${tab === 'delivery' ? ' owner-tab--active' : ''}`} onClick={() => setTab('delivery')}>
+            🛵 Delivery Queue
+          </button>
+        </nav>
+
+        {tab === 'stock' && (
+          <section className="dashboard-panel owner-panel">
+            <h2>Morning Stock Update</h2>
+            <p>Set product name, available stock, and price each morning before customers order.</p>
+
+            <form className="owner-product-form" onSubmit={handleSaveProduct}>
+              <div className="order-field">
+                <label htmlFor="pname">Product Name</label>
+                <input id="pname" value={productForm.name} onChange={(e) => setProductForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Tomato" required />
+              </div>
+              <div className="order-field">
+                <label htmlFor="pstock">Available Stock</label>
+                <input id="pstock" type="number" min={0} step="any" value={productForm.stock} onChange={(e) => setProductForm((f) => ({ ...f, stock: e.target.value }))} placeholder="e.g. 50" required />
+              </div>
+              <div className="order-field">
+                <label htmlFor="pprice">Price (₹ per unit)</label>
+                <input id="pprice" type="number" min={0.01} step="any" value={productForm.price} onChange={(e) => setProductForm((f) => ({ ...f, price: e.target.value }))} placeholder="e.g. 40" required />
+              </div>
+              <div className="order-field">
+                <label htmlFor="punit">Unit</label>
+                <select id="punit" value={productForm.unit} onChange={(e) => setProductForm((f) => ({ ...f, unit: e.target.value }))}>
+                  <option value="kg">kg</option>
+                  <option value="g">g</option>
+                  <option value="liter">liter</option>
+                  <option value="pcs">pcs</option>
+                </select>
+              </div>
+              <button type="submit" className="btn-primary">{editingId ? 'Update Product' : 'Add Product'}</button>
+              {editingId && (
+                <button type="button" className="btn-secondary" onClick={() => { setEditingId(null); setProductForm({ name: '', stock: '', price: '', unit: 'kg' }) }}>
+                  Cancel
+                </button>
+              )}
+            </form>
+
+            <h3 className="section-heading">Today&apos;s Product List</h3>
+            {products.length === 0 ? (
+              <p className="empty-state">No products yet. Add your morning stock above.</p>
+            ) : (
+              <table className="order-table">
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th>Stock</th>
+                    <th>Price</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {products.map((p) => (
+                    <tr key={p.id}>
+                      <td><strong>{p.name}</strong></td>
+                      <td>{p.stock} {p.unit}</td>
+                      <td>₹{p.price} / {p.unit}</td>
+                      <td className="row-muted">{p.updatedAt}</td>
+                      <td>
+                        <div className="owner-actions">
+                          <button type="button" className="btn-sm btn-sm--edit" onClick={() => startEdit(p)}>Edit</button>
+                          <button type="button" className="btn-sm btn-sm--danger" onClick={() => { deleteProduct(p.id); refresh(); setToast('Product removed.') }}>Remove</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
+        )}
+
+        {tab === 'orders' && (
+          <section className="dashboard-panel owner-panel">
+            <h2>Customer Order Requests</h2>
+            <p>Check stock availability, approve to generate bill, or reject to notify the customer.</p>
+
+            {pendingOrders.length === 0 && approvedOrders.length === 0 ? (
+              <p className="empty-state">No customer orders right now.</p>
+            ) : (
+              <div className="owner-order-list">
+                {[...pendingOrders, ...approvedOrders].map((order) => {
+                  const stockCheck = checkOrderStock(order)
+                  return (
+                    <article key={order.id} className="owner-order-card">
+                      <header className="owner-order-card__head">
+                        <div>
+                          <strong>Order #{order.id}</strong>
+                          <span className="row-muted"> · {order.submittedAt}</span>
+                        </div>
+                        <span className={`owner-status owner-status--${order.status}`}>{order.status}</span>
+                      </header>
+
+                      <div className="owner-order-card__customer">
+                        <span>👤 {order.customerName}</span>
+                        <span>📧 {order.customerEmail}</span>
+                        <span>📞 {order.customerPhone}</span>
+                        <span>📍 {order.customerAddress}</span>
+                      </div>
+
+                      <table className="order-table owner-order-table">
+                        <thead>
+                          <tr><th>Item</th><th>Qty</th><th>Unit</th><th>Stock check</th></tr>
+                        </thead>
+                        <tbody>
+                          {order.items.map((item, idx) => {
+                            const product = products.find((p) => p.name.toLowerCase() === item.itemName.toLowerCase())
+                            const inStock = product && product.stock >= item.quantity
+                            return (
+                              <tr key={idx}>
+                                <td>{item.itemName}</td>
+                                <td>{item.quantity}</td>
+                                <td>{item.measurement}</td>
+                                <td>
+                                  {!product ? (
+                                    <span className="stock-tag stock-tag--bad">Not listed</span>
+                                  ) : inStock ? (
+                                    <span className="stock-tag stock-tag--ok">{product.stock} {product.unit} avail.</span>
+                                  ) : (
+                                    <span className="stock-tag stock-tag--bad">Only {product.stock} left</span>
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+
+                      {!stockCheck.ok && order.status === 'pending' && (
+                        <div className="owner-stock-warning">⚠️ {stockCheck.issues.join(' ')}</div>
+                      )}
+
+                      {order.billLines && (
+                        <div className="owner-bill">
+                          <h4>Generated Bill — ₹{order.billAmount}</h4>
+                          <table className="order-table">
+                            <thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
+                            <tbody>
+                              {order.billLines.map((line, i) => (
+                                <tr key={i}>
+                                  <td>{line.itemName}</td>
+                                  <td>{line.quantity} {line.measurement}</td>
+                                  <td>₹{line.unitPrice}</td>
+                                  <td>₹{line.lineTotal}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {order.status === 'pending' && (
+                        <div className="owner-order-card__actions">
+                          <button type="button" className="btn-primary" onClick={() => handleApprove(order.id)}>
+                            {stockCheck.ok ? 'Approve & Generate Bill' : 'Reject (No Stock)'}
+                          </button>
+                          <button type="button" className="btn-secondary" onClick={() => setRejectingOrderId(order.id)}>
+                            Reject Order
+                          </button>
+                        </div>
+                      )}
+
+                      {order.status === 'approved' && (
+                        <div className="owner-order-card__actions">
+                          <button type="button" className="btn-primary" onClick={() => handleSendDelivery(order.id)}>
+                            Report to Delivery Boy
+                          </button>
+                        </div>
+                      )}
+                    </article>
+                  )
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
+        {tab === 'delivery' && (
+          <section className="dashboard-panel owner-panel">
+            <h2>Delivery Queue</h2>
+            <p>Orders approved and reported to delivery partners.</p>
+
+            {deliveries.length === 0 && sentOrders.length === 0 ? (
+              <p className="empty-state">No orders sent to delivery yet.</p>
+            ) : (
+              <div className="owner-order-list">
+                {deliveries.map((d) => (
+                  <article key={d.id} className="owner-order-card">
+                    <header className="owner-order-card__head">
+                      <strong>Delivery #{d.id} — Order #{d.orderId}</strong>
+                      <span className={`owner-status owner-status--sent_to_delivery`}>{d.status}</span>
+                    </header>
+                    <div className="owner-order-card__customer">
+                      <span>👤 {d.customerName}</span>
+                      <span>📍 {d.customerAddress}</span>
+                      <span>📞 {d.customerPhone}</span>
+                      <span>💰 Bill: ₹{d.billAmount}</span>
+                    </div>
+                    <table className="order-table owner-order-table">
+                      <thead><tr><th>Item</th><th>Qty</th><th>Amount</th></tr></thead>
+                      <tbody>
+                        {d.billLines.map((line, i) => (
+                          <tr key={i}>
+                            <td>{line.itemName}</td>
+                            <td>{line.quantity} {line.measurement}</td>
+                            <td>₹{line.lineTotal}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <p className="row-muted" style={{ marginTop: 12 }}>Assigned: {d.assignedAt}</p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+      </div>
+
+      {rejectingOrderId && (
+        <div className="owner-modal-overlay" onClick={() => setRejectingOrderId(null)}>
+          <div className="owner-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Reject Order #{rejectingOrderId}</h3>
+            <p>This will send a popup notification to the customer.</p>
+            <textarea
+              className="auth-input"
+              rows={3}
+              placeholder="Reason (e.g. Tomato out of stock)"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+            />
+            <div className="owner-modal__actions">
+              <button type="button" className="btn-primary" onClick={handleReject}>Confirm Reject</button>
+              <button type="button" className="btn-secondary" onClick={() => { setRejectingOrderId(null); setRejectReason('') }}>Cancel</button>
             </div>
           </div>
-        </section>
-      </div>
+        </div>
+      )}
     </div>
   )
 }

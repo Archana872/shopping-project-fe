@@ -1,7 +1,9 @@
+import { useEffect } from 'react'
 import { Navigate, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { OrderProvider } from '../context/OrderContext'
 import StoreNavbar from '../components/StoreNavbar'
 import { getSession, type Customer } from '../utils/authStorage'
+import { getUnreadNotifications, markNotificationRead } from '../utils/storeStorage'
 import '../styles/dashboard.css'
 
 const customerNav = [
@@ -11,16 +13,23 @@ const customerNav = [
   { to: '/customer/track-order', label: 'Track Order' }
 ]
 
-export default function CustomerLayout() {
-  const session = getSession()
+function CustomerShell({ customer }: { customer: Customer }) {
   const location = useLocation()
   const isHome = location.pathname === '/customer'
 
-  if (!session || session.role !== 'customer') {
-    return <Navigate to="/customer/login" replace />
-  }
-
-  const customer = session.user as Customer
+  useEffect(() => {
+    const checkNotifications = () => {
+      getUnreadNotifications(customer.email)
+        .filter((n) => n.type === 'rejection')
+        .forEach((n) => {
+          window.alert(`⚠️ Order Unavailable\n\n${n.message}`)
+          markNotificationRead(n.id)
+        })
+    }
+    checkNotifications()
+    const interval = setInterval(checkNotifications, 4000)
+    return () => clearInterval(interval)
+  }, [customer.email])
 
   return (
     <OrderProvider>
@@ -65,4 +74,14 @@ export default function CustomerLayout() {
       </div>
     </OrderProvider>
   )
+}
+
+export default function CustomerLayout() {
+  const session = getSession()
+
+  if (!session || session.role !== 'customer') {
+    return <Navigate to="/customer/login" replace />
+  }
+
+  return <CustomerShell customer={session.user as Customer} />
 }
