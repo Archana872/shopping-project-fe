@@ -5,55 +5,52 @@ import { MEASUREMENTS } from '../../types/order'
 
 export default function MyOrderPage() {
   const { draftItems, submittedOrders, addDraftItem } = useOrders()
+
   const [itemName, setItemName] = useState('')
   const [quantity, setQuantity] = useState('')
   const [measurement, setMeasurement] = useState<string>(MEASUREMENTS[0])
-  const [price, setPrice] = useState('')
   const [formError, setFormError] = useState('')
 
   const handleAddItem = async () => {
     setFormError('')
+
     const qty = Number(quantity)
-    const p = Number(price)
 
     if (!itemName.trim()) {
       setFormError('Item name is required.')
       return
     }
+
     if (!quantity || qty <= 0) {
       setFormError('Enter a valid quantity.')
       return
     }
-    if (!price || p <= 0) {
-      setFormError('Enter a valid price.')
-      return
-    }
-    // send to API via service
+
     try {
       const created = await createItem({
         itemName: itemName.trim(),
         quantity: qty,
-        measurement,
-        price: p
+        measurement
       })
 
       const itemToAdd: any = {
         itemName: itemName.trim(),
         quantity: qty,
-        measurement,
-        price: p
+        measurement
       }
-      if (created && created.id) itemToAdd.id = created.id
+
+      if (created && created.id) {
+        itemToAdd.id = created.id
+      }
 
       addDraftItem(itemToAdd)
+
+      setItemName('')
+      setQuantity('')
+      setMeasurement(MEASUREMENTS[0])
     } catch (err: any) {
       setFormError(err?.message || 'Network error while adding item.')
-      return
     }
-    setItemName('')
-    setQuantity('')
-    setMeasurement(MEASUREMENTS[0])
-    setPrice('')
   }
 
   return (
@@ -100,31 +97,25 @@ export default function MyOrderPage() {
             ))}
           </select>
         </div>
-
-        <div className="order-field">
-          <label htmlFor="price">Price</label>
-          <input
-            id="price"
-            type="number"
-            min={0.01}
-            step="any"
-            placeholder="e.g. 34"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-          />
-        </div>
       </div>
 
       {formError && <p className="form-error">{formError}</p>}
 
-      <button type="button" className="btn-primary" onClick={handleAddItem}>
+      <button
+        type="button"
+        className="btn-primary"
+        onClick={handleAddItem}
+      >
         Add Item
       </button>
 
       <div>
         <h3 className="section-heading">Your Items</h3>
+
         {draftItems.length === 0 && submittedOrders.length === 0 ? (
-          <p className="empty-state">No items yet. Add items using the form above.</p>
+          <p className="empty-state">
+            No items yet. Add items using the form above.
+          </p>
         ) : (
           <table className="order-table">
             <thead>
@@ -134,6 +125,7 @@ export default function MyOrderPage() {
                 <th>Measurement</th>
               </tr>
             </thead>
+
             <tbody>
               {draftItems.map((item) => (
                 <tr key={item.id}>
@@ -142,9 +134,13 @@ export default function MyOrderPage() {
                   <td>{item.measurement}</td>
                 </tr>
               ))}
+
               {submittedOrders.flatMap((order) =>
                 order.items.map((item) => (
-                  <tr key={`${order.id}-${item.id}`} className="row-muted">
+                  <tr
+                    key={`${order.id}-${item.id}`}
+                    className="row-muted"
+                  >
                     <td>{item.itemName}</td>
                     <td>{item.quantity}</td>
                     <td>{item.measurement} (submitted)</td>

@@ -1,25 +1,22 @@
 export type NewItem = {
-  itemName: string
-  quantity: number
-  measurement: string
-  price: number
-}
+  itemName: string;
+  quantity: number;
+  measurement: string;
+};
 
-export async function createItem(item: NewItem): Promise<any> {
-  const res = await fetch('https://localhost:44399/api/items', {
+export async function createItem(item: NewItem) {
+  const res = await fetch('https://localhost:44399/api/Insertitems', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify(item)
-  })
+  });
 
   if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`Request failed (${res.status}) ${text}`)
+    const text = await res.text();
+    throw new Error(`Request failed (${res.status}) ${text}`);
   }
 
-  try {
-    return await res.json()
-  } catch {
-    return undefined
-  }
+  return await res.json();
 }
