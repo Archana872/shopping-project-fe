@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useOrders } from '../../context/OrderContext'
+import { createItem } from '../../services/itemService'
 import { MEASUREMENTS } from '../../types/order'
 
 export default function MyOrderPage() {
@@ -7,11 +8,13 @@ export default function MyOrderPage() {
   const [itemName, setItemName] = useState('')
   const [quantity, setQuantity] = useState('')
   const [measurement, setMeasurement] = useState<string>(MEASUREMENTS[0])
+  const [price, setPrice] = useState('')
   const [formError, setFormError] = useState('')
 
-  const handleAddItem = () => {
+  const handleAddItem = async () => {
     setFormError('')
     const qty = Number(quantity)
+    const p = Number(price)
 
     if (!itemName.trim()) {
       setFormError('Item name is required.')
@@ -21,15 +24,36 @@ export default function MyOrderPage() {
       setFormError('Enter a valid quantity.')
       return
     }
+    if (!price || p <= 0) {
+      setFormError('Enter a valid price.')
+      return
+    }
+    // send to API via service
+    try {
+      const created = await createItem({
+        itemName: itemName.trim(),
+        quantity: qty,
+        measurement,
+        price: p
+      })
 
-    addDraftItem({
-      itemName: itemName.trim(),
-      quantity: qty,
-      measurement
-    })
+      const itemToAdd: any = {
+        itemName: itemName.trim(),
+        quantity: qty,
+        measurement,
+        price: p
+      }
+      if (created && created.id) itemToAdd.id = created.id
+
+      addDraftItem(itemToAdd)
+    } catch (err: any) {
+      setFormError(err?.message || 'Network error while adding item.')
+      return
+    }
     setItemName('')
     setQuantity('')
     setMeasurement(MEASUREMENTS[0])
+    setPrice('')
   }
 
   return (
@@ -75,6 +99,19 @@ export default function MyOrderPage() {
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="order-field">
+          <label htmlFor="price">Price</label>
+          <input
+            id="price"
+            type="number"
+            min={0.01}
+            step="any"
+            placeholder="e.g. 34"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+          />
         </div>
       </div>
 
