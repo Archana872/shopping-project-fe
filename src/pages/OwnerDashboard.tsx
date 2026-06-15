@@ -4,12 +4,14 @@ import StoreNavbar from '../components/StoreNavbar'
 import { getSession, type Owner } from '../utils/authStorage'
 import {
   approveOrder,
+  checkItemAvailability,
   checkOrderStock,
   deleteProduct,
   getDeliveries,
   getOrders,
   getProducts,
   rejectOrder,
+  rejectOrderItem,
   saveProduct,
   sendToDelivery,
   updateProduct
@@ -90,17 +92,26 @@ export default function OwnerDashboard() {
   const handleApprove = (orderId: number) => {
     const result = approveOrder(orderId)
     if (result.ok === false) {
-      const order = orders.find((o) => o.id === orderId)
-      if (order) {
-        const reason = result.message
-        rejectOrder(orderId, `Sorry, your order could not be fulfilled: ${reason}`)
-        setToast('Stock unavailable — customer notified.')
-      }
+      setToast(result.message)
       refresh()
       return
     }
-    setToast(`Order #${orderId} approved. Bill: ₹${result.order.billAmount}`)
+    const rejectedCount = result.order.items.filter((i) => i.rejected).length
+    setToast(
+      rejectedCount > 0
+        ? `Order #${orderId} partially approved. Bill: ₹${result.order.billAmount} (${rejectedCount} item(s) removed).`
+        : `Order #${orderId} approved. Bill: ₹${result.order.billAmount}`
+    )
     refresh()
+  }
+
+  const handleRejectItem = (orderId: number, itemIndex: number) => {
+    const updated = rejectOrderItem(orderId, itemIndex)
+    if (updated) {
+      const item = updated.items[itemIndex]
+      setToast(`"${item.itemName}" removed from order — customer notified.`)
+      refresh()
+    }
   }
 
   const handleReject = () => {
@@ -238,7 +249,7 @@ export default function OwnerDashboard() {
         {tab === 'orders' && (
           <section className="dashboard-panel owner-panel">
             <h2>Customer Order Requests</h2>
-            <p>Check stock availability, approve to generate bill, or reject to notify the customer.</p>
+            <p>Check stock per item, reject unavailable products, then approve the rest to generate the bill.</p>
 
             {pendingOrders.length === 0 && approvedOrders.length === 0 ? (
               <p className="empty-state">No customer orders right now.</p>
@@ -246,6 +257,8 @@ export default function OwnerDashboard() {
               <div className="owner-order-list">
                 {[...pendingOrders, ...approvedOrders].map((order) => {
                   const stockCheck = checkOrderStock(order)
+                  const activeItems = order.items.filter((i) => !i.rejected)
+                  const canApprove = order.status === 'pending' && activeItems.length > 0 && stockCheck.ok
                   return (
                     <article key={order.id} className="owner-order-card">
                       <header className="owner-order-card__head">
@@ -265,19 +278,30 @@ export default function OwnerDashboard() {
 
                       <table className="order-table owner-order-table">
                         <thead>
-                          <tr><th>Item</th><th>Qty</th><th>Unit</th><th>Stock check</th></tr>
+                          <tr>
+                            <th>Item</th>
+                            <th>Qty</th>
+                            <th>Unit</th>
+                            <th>Stock check</th>
+                            {order.status === 'pending' && <th>Action</th>}
+                          </tr>
                         </thead>
                         <tbody>
                           {order.items.map((item, idx) => {
+                            const availability = item.rejected ? null : checkItemAvailability(item)
                             const product = products.find((p) => p.name.toLowerCase() === item.itemName.toLowerCase())
-                            const inStock = product && product.stock >= item.quantity
+                            const inStock = availability?.ok ?? false
                             return (
-                              <tr key={idx}>
+                              <tr key={idx} className={item.rejected ? 'owner-order-item--rejected' : undefined}>
                                 <td>{item.itemName}</td>
                                 <td>{item.quantity}</td>
                                 <td>{item.measurement}</td>
                                 <td>
-                                  {!product ? (
+                                  {item.rejected ? (
+                                    <span className="stock-tag stock-tag--bad" title={item.rejectionReason}>
+                                      Rejected
+                                    </span>
+                                  ) : !product ? (
                                     <span className="stock-tag stock-tag--bad">Not listed</span>
                                   ) : inStock ? (
                                     <span className="stock-tag stock-tag--ok">{product.stock} {product.unit} avail.</span>
@@ -285,19 +309,46 @@ export default function OwnerDashboard() {
                                     <span className="stock-tag stock-tag--bad">Only {product.stock} left</span>
                                   )}
                                 </td>
+                                {order.status === 'pending' && (
+                                  <td>
+                                    {!item.rejected && !inStock && (
+                                      <button
+                                        type="button"
+                                        className="btn-sm btn-sm--danger"
+                                        onClick={() => handleRejectItem(order.id, idx)}
+                                      >
+                                        Reject Item
+                                      </button>
+                                    )}
+                                    {item.rejected && (
+                                      <span className="row-muted">{item.rejectionReason}</span>
+                                    )}
+                                  </td>
+                                )}
                               </tr>
                             )
                           })}
                         </tbody>
                       </table>
 
-                      {!stockCheck.ok && order.status === 'pending' && (
-                        <div className="owner-stock-warning">⚠️ {stockCheck.issues.join(' ')}</div>
+                      {!stockCheck.ok && order.status === 'pending' && activeItems.length > 0 && (
+                        <div className="owner-stock-warning">
+                          ⚠️ Some items are unavailable. Use <strong>Reject Item</strong> on each unavailable product, then approve the rest.
+                        </div>
+                      )}
+
+                      {activeItems.length === 0 && order.status === 'pending' && (
+                        <div className="owner-stock-warning">
+                          ⚠️ All items have been rejected. Reject the entire order or wait for a new request.
+                        </div>
                       )}
 
                       {order.billLines && (
                         <div className="owner-bill">
-                          <h4>Generated Bill — ₹{order.billAmount}</h4>
+                          <h4>
+                            Generated Bill — ₹{order.billAmount}
+                            {order.items.some((i) => i.rejected) && ' (available items only)'}
+                          </h4>
                           <table className="order-table">
                             <thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
                             <tbody>
@@ -316,11 +367,22 @@ export default function OwnerDashboard() {
 
                       {order.status === 'pending' && (
                         <div className="owner-order-card__actions">
-                          <button type="button" className="btn-primary" onClick={() => handleApprove(order.id)}>
-                            {stockCheck.ok ? 'Approve & Generate Bill' : 'Reject (No Stock)'}
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            disabled={!canApprove}
+                            onClick={() => handleApprove(order.id)}
+                          >
+                            {activeItems.length === 0
+                              ? 'No items to approve'
+                              : stockCheck.ok
+                                ? activeItems.length < order.items.length
+                                  ? 'Approve Available Items & Generate Bill'
+                                  : 'Approve & Generate Bill'
+                                : 'Reject unavailable items first'}
                           </button>
                           <button type="button" className="btn-secondary" onClick={() => setRejectingOrderId(order.id)}>
-                            Reject Order
+                            Reject Entire Order
                           </button>
                         </div>
                       )}

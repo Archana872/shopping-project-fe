@@ -11,6 +11,8 @@ export interface StoreOrderItem {
   itemName: string
   quantity: number
   measurement: string
+  rejected?: boolean
+  rejectionReason?: string
 }
 
 export type OrderRequestStatus =

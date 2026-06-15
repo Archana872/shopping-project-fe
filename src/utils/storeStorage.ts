@@ -4,7 +4,8 @@ import type {
   DeliveryAssignment,
   Product,
   StockCheckResult,
-  StoreOrder
+  StoreOrder,
+  StoreOrderItem
 } from '../types/store'
 
 const KEYS = {
@@ -112,29 +113,39 @@ export function addOrder(order: Omit<StoreOrder, 'id' | 'status' | 'submittedAt'
   return newOrder
 }
 
-export function checkOrderStock(order: StoreOrder): StockCheckResult {
+function getActiveItems(order: StoreOrder) {
+  return order.items.filter((item) => !item.rejected)
+}
+
+export function checkItemAvailability(item: StoreOrderItem): { ok: boolean; issue?: string } {
   const products = getProducts()
+  const product = findProductByName(products, item.itemName)
+  if (!product) {
+    return { ok: false, issue: `"${item.itemName}" is not in today's stock list.` }
+  }
+  if (product.stock < item.quantity) {
+    return {
+      ok: false,
+      issue: `"${item.itemName}": need ${item.quantity} ${item.measurement}, only ${product.stock} ${product.unit} available.`
+    }
+  }
+  return { ok: true }
+}
+
+export function checkOrderStock(order: StoreOrder): StockCheckResult {
   const issues: string[] = []
 
-  for (const item of order.items) {
-    const product = findProductByName(products, item.itemName)
-    if (!product) {
-      issues.push(`"${item.itemName}" is not in today's stock list.`)
-      continue
-    }
-    if (product.stock < item.quantity) {
-      issues.push(
-        `"${item.itemName}": need ${item.quantity} ${item.measurement}, only ${product.stock} ${product.unit} available.`
-      )
-    }
+  for (const item of getActiveItems(order)) {
+    const check = checkItemAvailability(item)
+    if (!check.ok && check.issue) issues.push(check.issue)
   }
 
   return { ok: issues.length === 0, issues }
 }
 
-function buildBillLines(order: StoreOrder): BillLine[] {
+function buildBillLines(items: StoreOrderItem[]): BillLine[] {
   const products = getProducts()
-  return order.items.map((item) => {
+  return items.map((item) => {
     const product = findProductByName(products, item.itemName)!
     const lineTotal = product.price * item.quantity
     return {
@@ -147,21 +158,62 @@ function buildBillLines(order: StoreOrder): BillLine[] {
   })
 }
 
+export function rejectOrderItem(orderId: number, itemIndex: number): StoreOrder | null {
+  const orders = getOrders()
+  const order = orders.find((o) => o.id === orderId)
+  if (!order || order.status !== 'pending') return null
+
+  const item = order.items[itemIndex]
+  if (!item || item.rejected) return null
+
+  const availability = checkItemAvailability(item)
+  const reason = availability.issue ?? 'Item unavailable at this time.'
+
+  const updatedItems = order.items.map((it, idx) =>
+    idx === itemIndex ? { ...it, rejected: true, rejectionReason: reason } : it
+  )
+  const updatedOrder: StoreOrder = { ...order, items: updatedItems }
+
+  write(
+    KEYS.orders,
+    orders.map((o) => (o.id === orderId ? updatedOrder : o))
+  )
+
+  addNotification({
+    customerEmail: order.customerEmail,
+    orderId: order.id,
+    message: `Item "${item.itemName}" removed from order #${order.id}: ${reason}`,
+    type: 'rejection'
+  })
+
+  return updatedOrder
+}
+
 export function approveOrder(orderId: number): { ok: true; order: StoreOrder } | { ok: false; message: string } {
   const orders = getOrders()
   const order = orders.find((o) => o.id === orderId)
   if (!order) return { ok: false, message: 'Order not found.' }
   if (order.status !== 'pending') return { ok: false, message: 'Order already processed.' }
 
-  const stockCheck = checkOrderStock(order)
-  if (!stockCheck.ok) return { ok: false, message: stockCheck.issues.join(' ') }
+  const activeItems = getActiveItems(order)
+  if (activeItems.length === 0) {
+    return { ok: false, message: 'No items left to approve. Reject unavailable items or reject the entire order.' }
+  }
 
-  const billLines = buildBillLines(order)
+  const stockCheck = checkOrderStock(order)
+  if (!stockCheck.ok) {
+    return {
+      ok: false,
+      message: `Reject unavailable items first. ${stockCheck.issues.join(' ')}`
+    }
+  }
+
+  const billLines = buildBillLines(activeItems)
   const billAmount = billLines.reduce((sum, line) => sum + line.lineTotal, 0)
 
   const products = getProducts()
   const updatedProducts = products.map((p) => {
-    const ordered = order.items.find((i) => i.itemName.toLowerCase() === p.name.toLowerCase())
+    const ordered = activeItems.find((i) => i.itemName.toLowerCase() === p.name.toLowerCase())
     if (!ordered) return p
     return { ...p, stock: p.stock - ordered.quantity, updatedAt: new Date().toLocaleString() }
   })
@@ -179,10 +231,14 @@ export function approveOrder(orderId: number): { ok: true; order: StoreOrder } |
     orders.map((o) => (o.id === orderId ? updatedOrder : o))
   )
 
+  const rejectedCount = order.items.filter((i) => i.rejected).length
   addNotification({
     customerEmail: order.customerEmail,
     orderId: order.id,
-    message: `Order #${order.id} approved! Bill total: ₹${billAmount}. Your order is being prepared.`,
+    message:
+      rejectedCount > 0
+        ? `Order #${order.id} partially approved! Bill total: ₹${billAmount}. ${rejectedCount} unavailable item(s) were removed.`
+        : `Order #${order.id} approved! Bill total: ₹${billAmount}. Your order is being prepared.`,
     type: 'approval'
   })
 
@@ -232,7 +288,7 @@ export function sendToDelivery(orderId: number): DeliveryAssignment | null {
     customerAddress: order.customerAddress,
     customerPhone: order.customerPhone,
     billAmount: order.billAmount,
-    items: order.items,
+    items: order.items.filter((i) => !i.rejected),
     billLines: order.billLines,
     status: 'assigned',
     assignedAt: new Date().toLocaleString()

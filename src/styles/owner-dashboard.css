@@ -213,6 +213,19 @@
   font-size: 15px;
 }
 
+.owner-order-item--rejected td {
+  opacity: 0.65;
+}
+
+.owner-order-item--rejected td:first-child {
+  text-decoration: line-through;
+}
+
+.btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .owner-order-card__actions {
   display: flex;
   gap: 10px;
