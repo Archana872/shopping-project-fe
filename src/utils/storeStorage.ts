@@ -246,6 +246,19 @@ export function getDeliveries(): DeliveryAssignment[] {
   return read<DeliveryAssignment>(KEYS.deliveries)
 }
 
+export function updateDeliveryStatus(
+  deliveryId: number,
+  status: DeliveryAssignment['status']
+): DeliveryAssignment | null {
+  const deliveries = getDeliveries()
+  const idx = deliveries.findIndex((d) => d.id === deliveryId)
+  if (idx === -1) return null
+  const updated = { ...deliveries[idx], status }
+  deliveries[idx] = updated
+  write(KEYS.deliveries, deliveries)
+  return updated
+}
+
 function addNotification(n: Omit<CustomerNotification, 'id' | 'read' | 'createdAt'>) {
   const notification: CustomerNotification = {
     ...n,

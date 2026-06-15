@@ -1,4 +1,3 @@
-export { default } from '../customer/Track'
 export default function TrackOrder() {
-  return <h2>New Order</h2>
+  return <h2>Track Order</h2>
 }

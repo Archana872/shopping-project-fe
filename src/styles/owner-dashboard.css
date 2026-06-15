@@ -157,6 +157,21 @@
   color: #0369a1;
 }
 
+.owner-status--assigned {
+  background: var(--store-blue-soft);
+  color: #0369a1;
+}
+
+.owner-status--in_transit {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.owner-status--delivered {
+  background: var(--store-green-bg);
+  color: var(--store-green-dark);
+}
+
 .stock-tag {
   font-size: 12px;
   font-weight: 600;
