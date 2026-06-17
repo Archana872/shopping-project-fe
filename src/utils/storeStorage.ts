@@ -38,6 +38,27 @@ function findProductByName(products: Product[], name: string) {
   return products.find((p) => p.name.toLowerCase() === name.trim().toLowerCase())
 }
 
+export function syncProductsFromApi(
+  stockItems: Array<{
+    stockId: number
+    itemName: string
+    availableQuantity: number
+    measurement: string
+    price: number
+  }>
+): Product[] {
+  const products: Product[] = stockItems.map((item) => ({
+    id: item.stockId,
+    name: item.itemName,
+    stock: item.availableQuantity,
+    price: item.price,
+    unit: item.measurement,
+    updatedAt: new Date().toLocaleString()
+  }))
+  write(KEYS.products, products)
+  return products
+}
+
 export function getProducts(): Product[] {
   const products = read<Product>(KEYS.products)
   if (products.length === 0) {

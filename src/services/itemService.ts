@@ -1,60 +1,77 @@
+const API_BASE = import.meta.env.VITE_API_BASE ?? '/api'
+
 export type NewItem = {
-  itemName: string;
-  quantity: number;
-  measurement: string;
-};
+  itemName: string
+  quantity: number
+  measurement: string
+}
 
 export type UpdateStockRequest = {
-  itemName: string;
-  availableQuantity: number;
-};
+  itemName: string
+  availableQuantity: number
+}
 
-export async function createItem(item: NewItem) {
-  const res = await fetch('https://localhost:44399/api/Insertitems', {
-    method: 'POST',
+export type ApiStockItem = {
+  stockId: number
+  itemName: string
+  availableQuantity: number
+  measurement: string
+  price: number
+}
+
+export type ApiOrderItem = {
+  id: number
+  itemName: string
+  quantity: number
+  measurement: string
+  price: number
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
     headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(item)
-  });
+      'Content-Type': 'application/json',
+      ...(options.headers ?? {})
+    }
+  })
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Request failed (${res.status}) ${text}`);
+    const text = await res.text()
+    throw new Error(`Request failed (${res.status}) ${text}`)
   }
 
-  return await res.json();
+  const contentType = res.headers.get('content-type') ?? ''
+  if (contentType.includes('application/json')) {
+    return (await res.json()) as T
+  }
+
+  return (await res.text()) as T
+}
+
+export async function createItem(item: NewItem) {
+  return request<Record<string, unknown>>('/Insertitems', {
+    method: 'POST',
+    body: JSON.stringify(item)
+  })
 }
 
 export async function updateStock(stock: UpdateStockRequest) {
-  const res = await fetch('https://localhost:44399/api/updatestock', {
+  return request<string>('/updatestock', {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json'
-    },
     body: JSON.stringify(stock)
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Request failed (${res.status}) ${text}`);
-  }
-
-  return await res.text();
+  })
 }
 
 export async function getStock() {
-  const res = await fetch('https://localhost:44399/api/stock', {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json'
-    }
-  });
+  return request<ApiStockItem[]>('/stock')
+}
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Request failed (${res.status}) ${text}`);
-  }
+export async function getItems() {
+  return request<ApiOrderItem[]>('/getitems')
+}
 
-  return await res.json();
+export function isValidApiOrderItem(item: ApiOrderItem) {
+  const name = item.itemName.trim().toLowerCase()
+  return name.length > 0 && name !== 'string' && item.quantity > 0
 }

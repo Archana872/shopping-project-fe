@@ -14,8 +14,10 @@ import {
   rejectOrderItem,
   saveProduct,
   sendToDelivery,
+  syncProductsFromApi,
   updateProduct
 } from '../utils/storeStorage'
+import { getStock, updateStock } from '../services/itemService'
 import type { DeliveryAssignment, Product, StoreOrder } from '../types/store'
 import '../styles/dashboard.css'
 import '../styles/owner-dashboard.css'
@@ -34,9 +36,22 @@ export default function OwnerDashboard() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [rejectReason, setRejectReason] = useState('')
   const [rejectingOrderId, setRejectingOrderId] = useState<number | null>(null)
+  const [loadingStock, setLoadingStock] = useState(false)
+  const [apiError, setApiError] = useState('')
 
-  const refresh = useCallback(() => {
-    setProducts(getProducts())
+  const refresh = useCallback(async () => {
+    setLoadingStock(true)
+    setApiError('')
+    try {
+      const stock = await getStock()
+      syncProductsFromApi(stock)
+      setProducts(getProducts())
+    } catch (err) {
+      setProducts(getProducts())
+      setApiError(err instanceof Error ? err.message : 'Failed to load stock from server.')
+    } finally {
+      setLoadingStock(false)
+    }
     setOrders(getOrders())
     setDeliveries(getDeliveries())
   }, [])
@@ -60,27 +75,36 @@ export default function OwnerDashboard() {
   const approvedOrders = orders.filter((o) => o.status === 'approved')
   const sentOrders = orders.filter((o) => o.status === 'sent_to_delivery')
 
-  const handleSaveProduct = (e: FormEvent) => {
+  const handleSaveProduct = async (e: FormEvent) => {
     e.preventDefault()
     const stock = Number(productForm.stock)
     const price = Number(productForm.price)
     if (!productForm.name.trim() || stock < 0 || price <= 0) return
 
-    if (editingId) {
-      updateProduct(editingId, {
-        name: productForm.name.trim(),
-        stock,
-        price,
-        unit: productForm.unit
-      })
-      setEditingId(null)
-      setToast('Product updated for today.')
-    } else {
-      saveProduct({ name: productForm.name.trim(), stock, price, unit: productForm.unit })
-      setToast('Product added to morning stock.')
+    const itemName = productForm.name.trim()
+
+    try {
+      await updateStock({ itemName, availableQuantity: stock })
+
+      if (editingId) {
+        updateProduct(editingId, {
+          name: itemName,
+          stock,
+          price,
+          unit: productForm.unit
+        })
+        setEditingId(null)
+        setToast('Stock updated on server.')
+      } else {
+        saveProduct({ name: itemName, stock, price, unit: productForm.unit })
+        setToast('Product added and stock synced to server.')
+      }
+
+      setProductForm({ name: '', stock: '', price: '', unit: 'kg' })
+      await refresh()
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : 'Failed to update stock on server.')
     }
-    setProductForm({ name: '', stock: '', price: '', unit: 'kg' })
-    refresh()
   }
 
   const startEdit = (p: Product) => {
@@ -136,6 +160,7 @@ export default function OwnerDashboard() {
       <StoreNavbar userLabel={`${owner.name} · Owner`} />
 
       {toast && <div className="owner-toast">{toast}</div>}
+      {apiError && <div className="owner-toast owner-toast--error">{apiError}</div>}
 
       <div className="dashboard-inner">
         <section className="store-hero store-hero--compact owner-hero">
@@ -212,6 +237,7 @@ export default function OwnerDashboard() {
             </form>
 
             <h3 className="section-heading">Today&apos;s Product List</h3>
+            {loadingStock && <p className="row-muted">Loading stock from server…</p>}
             {products.length === 0 ? (
               <p className="empty-state">No products yet. Add your morning stock above.</p>
             ) : (
