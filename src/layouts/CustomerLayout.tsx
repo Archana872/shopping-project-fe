@@ -10,6 +10,7 @@ const customerNav = [
   { to: '/customer', label: 'Home' },
   { to: '/customer/my-order', label: 'My Order' },
   { to: '/customer/new-order', label: 'New Order' },
+  { to: '/customer/items-ordered', label: 'Items Ordered' },
   { to: '/customer/track-order', label: 'Track Order' }
 ]
 
@@ -56,6 +57,15 @@ function CustomerShell({ customer }: { customer: Customer }) {
               >
                 <span className="customer-icon-btn__emoji" aria-hidden="true">🛒</span>
                 <span className="customer-icon-btn__label">New Order</span>
+              </NavLink>
+              <NavLink
+                to="/customer/items-ordered"
+                className={({ isActive }) =>
+                  `customer-icon-btn${isActive ? ' customer-icon-btn--active' : ''}`
+                }
+              >
+                <span className="customer-icon-btn__emoji" aria-hidden="true">📦</span>
+                <span className="customer-icon-btn__label">Items Ordered</span>
               </NavLink>
               <NavLink
                 to="/customer/track-order"

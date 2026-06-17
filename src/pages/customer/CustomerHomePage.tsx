@@ -44,6 +44,13 @@ export default function CustomerHomePage() {
               <div className="product-card__sub">Review &amp; submit</div>
             </div>
           </Link>
+          <Link to="/customer/items-ordered" className="product-card product-card--purple">
+            <div className="product-card__image"><span>📦</span></div>
+            <div className="product-card__body">
+              <div className="product-card__label">Items Ordered</div>
+              <div className="product-card__sub">All products ever ordered</div>
+            </div>
+          </Link>
           <Link to="/customer/track-order" className="product-card product-card--orange">
             <div className="product-card__image"><span>🚚</span></div>
             <div className="product-card__body">
