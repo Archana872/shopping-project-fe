@@ -1,12 +1,16 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useOrders } from '../../context/OrderContext'
 
 export default function NewOrderPage() {
-  const { draftItems, submitOrder } = useOrders()
+  const { draftItems, submitOrder, submitError } = useOrders()
   const navigate = useNavigate()
+  const [submitting, setSubmitting] = useState(false)
 
-  const handleSubmitOrder = () => {
-    const order = submitOrder()
+  const handleSubmitOrder = async () => {
+    setSubmitting(true)
+    const order = await submitOrder()
+    setSubmitting(false)
     if (order) navigate('/customer/track-order')
   }
 
@@ -41,13 +45,21 @@ export default function NewOrderPage() {
               ))}
             </tbody>
           </table>
+
+          {submitError && (
+            <p className="form-error" style={{ marginTop: 12 }}>
+              ⚠️ {submitError}
+            </p>
+          )}
+
           <button
             type="button"
             className="btn-primary"
             style={{ marginTop: 20 }}
             onClick={handleSubmitOrder}
+            disabled={submitting}
           >
-            Submit Order
+            {submitting ? 'Submitting…' : 'Submit Order'}
           </button>
         </>
       )}
