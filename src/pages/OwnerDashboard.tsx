@@ -1,70 +1,93 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import StoreNavbar from '../components/StoreNavbar'
 import { getSession, type Owner } from '../utils/authStorage'
 import {
-  approveOrder,
-  checkItemAvailability,
-  checkOrderStock,
-  deleteProduct,
+  addNotification,
   getDeliveries,
   getOrders,
-  getProducts,
-  rejectOrder,
-  rejectOrderItem,
-  saveProduct,
-  sendToDelivery,
-  syncProductsFromApi,
-  updateProduct
-} from '../utils/storeStorage'
+  saveDelivery,
+  updateOrderStatus,
+} from '../utils/ownerStorage'
 import { getStock, updateStock } from '../services/itemService'
-import type { DeliveryAssignment, Product, StoreOrder } from '../types/store'
+import { addStock } from '../services/stockService'
+import type { DeliveryAssignment, StoreOrder } from '../types/store'
+import type { ApiStockItem } from '../services/itemService'
 import '../styles/dashboard.css'
 import '../styles/owner-dashboard.css'
 
 type OwnerTab = 'stock' | 'orders' | 'delivery'
 
+interface StockRow {
+  stockId: number
+  name: string
+  stock: number
+  price: number
+  unit: string
+}
+
 export default function OwnerDashboard() {
   const session = getSession()
   const [tab, setTab] = useState<OwnerTab>('stock')
-  const [products, setProducts] = useState<Product[]>([])
+
+  // Stock state — source of truth is SQL via getStock()
+  const [stockRows, setStockRows] = useState<StockRow[]>([])
+  const [loadingStock, setLoadingStock] = useState(false)
+  const [apiError, setApiError] = useState('')
+
+  // Orders & deliveries — from localStorage
   const [orders, setOrders] = useState<StoreOrder[]>([])
   const [deliveries, setDeliveries] = useState<DeliveryAssignment[]>([])
-  const [toast, setToast] = useState('')
 
+  const [toast, setToast] = useState('')
   const [productForm, setProductForm] = useState({ name: '', stock: '', price: '', unit: 'kg' })
   const [editingId, setEditingId] = useState<number | null>(null)
   const [rejectReason, setRejectReason] = useState('')
   const [rejectingOrderId, setRejectingOrderId] = useState<number | null>(null)
-  const [loadingStock, setLoadingStock] = useState(false)
-  const [apiError, setApiError] = useState('')
 
-  const refresh = useCallback(async () => {
+  // Track in-flight approve to disable button
+  const [approvingId, setApprovingId] = useState<number | null>(null)
+
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(''), 3500)
+  }, [])
+
+  // Load stock from SQL server
+  const loadStock = useCallback(async () => {
     setLoadingStock(true)
     setApiError('')
     try {
-      const stock = await getStock()
-      syncProductsFromApi(stock)
-      setProducts(getProducts())
+      const items: ApiStockItem[] = await getStock()
+      setStockRows(
+        items.map((s) => ({
+          stockId: s.stockId,
+          name: s.itemName,
+          stock: s.availableQuantity,
+          price: s.price,
+          unit: s.measurement,
+        }))
+      )
     } catch (err) {
-      setProducts(getProducts())
       setApiError(err instanceof Error ? err.message : 'Failed to load stock from server.')
     } finally {
       setLoadingStock(false)
     }
+  }, [])
+
+  // Load orders & deliveries from localStorage
+  const loadOrdersAndDeliveries = useCallback(() => {
     setOrders(getOrders())
     setDeliveries(getDeliveries())
   }, [])
 
   useEffect(() => {
-    refresh()
-  }, [refresh])
-
-  useEffect(() => {
-    if (!toast) return
-    const t = setTimeout(() => setToast(''), 3500)
-    return () => clearTimeout(t)
-  }, [toast])
+    loadStock()
+    loadOrdersAndDeliveries()
+  }, [loadStock, loadOrdersAndDeliveries])
 
   if (!session || session.role !== 'owner') {
     return <Navigate to="/owner/login" replace />
@@ -75,85 +98,228 @@ export default function OwnerDashboard() {
   const approvedOrders = orders.filter((o) => o.status === 'approved')
   const sentOrders = orders.filter((o) => o.status === 'sent_to_delivery')
 
+  // ── Morning Stock form ──────────────────────────────────────────────────────
+
   const handleSaveProduct = async (e: FormEvent) => {
-    e.preventDefault()
-    const stock = Number(productForm.stock)
-    const price = Number(productForm.price)
-    if (!productForm.name.trim() || stock < 0 || price <= 0) return
+  e.preventDefault()
 
-    const itemName = productForm.name.trim()
+  const qty = Number(productForm.stock)
+  const price = Number(productForm.price)
 
-    try {
-      await updateStock({ itemName, availableQuantity: stock })
+  if (!productForm.name.trim() || qty < 0 || price <= 0) {
+    return
+  }
 
-      if (editingId) {
-        updateProduct(editingId, {
-          name: itemName,
-          stock,
-          price,
-          unit: productForm.unit
-        })
-        setEditingId(null)
-        setToast('Stock updated on server.')
-      } else {
-        saveProduct({ name: itemName, stock, price, unit: productForm.unit })
-        setToast('Product added and stock synced to server.')
-      }
+  try {
+    if (editingId) {
+      await updateStock({
+        itemName: productForm.name.trim(),
+        availableQuantity: qty
+      })
 
-      setProductForm({ name: '', stock: '', price: '', unit: 'kg' })
-      await refresh()
-    } catch (err) {
-      setToast(err instanceof Error ? err.message : 'Failed to update stock on server.')
+      showToast('Stock updated successfully')
+    } else {
+      await addStock({
+        itemName: productForm.name.trim(),
+        availableQuantity: qty,
+        measurement: productForm.unit,
+        price: price
+      })
+
+      showToast('Stock added successfully')
     }
-  }
 
-  const startEdit = (p: Product) => {
-    setEditingId(p.id)
-    setProductForm({ name: p.name, stock: String(p.stock), price: String(p.price), unit: p.unit })
-    setTab('stock')
-  }
+    setProductForm({
+      name: '',
+      stock: '',
+      price: '',
+      unit: 'kg'
+    })
 
-  const handleApprove = (orderId: number) => {
-    const result = approveOrder(orderId)
-    if (result.ok === false) {
-      setToast(result.message)
-      refresh()
+    setEditingId(null)
+
+    await loadStock()
+  } catch (err) {
+    showToast(
+      err instanceof Error
+        ? err.message
+        : 'Failed to save stock'
+    )
+  }
+}
+
+  // ── Approve order ───────────────────────────────────────────────────────────
+
+  const handleApprove = async (orderId: number) => {
+    const order = orders.find((o) => o.id === orderId)
+    if (!order || order.status !== 'pending') return
+
+    const activeItems = order.items.filter((i) => !i.rejected)
+    if (activeItems.length === 0) {
+      showToast('No items to approve.')
       return
     }
-    const rejectedCount = result.order.items.filter((i) => i.rejected).length
-    setToast(
+
+    // Check every active item has enough stock in our current state
+    const issues: string[] = []
+    for (const item of activeItems) {
+      const row = stockRows.find((r) => r.name.toLowerCase() === item.itemName.toLowerCase())
+      if (!row) {
+        issues.push(`"${item.itemName}" not found in stock.`)
+      } else if (row.stock < item.quantity) {
+        issues.push(`"${item.itemName}": need ${item.quantity}, only ${row.stock} available.`)
+      }
+    }
+    if (issues.length > 0) {
+      showToast(issues.join(' '))
+      return
+    }
+
+    setApprovingId(orderId)
+
+    // 1. Compute deducted stock rows immediately
+    const deducted = stockRows.map((row) => {
+      const ordered = activeItems.find((i) => i.itemName.toLowerCase() === row.name.toLowerCase())
+      if (!ordered) return row
+      return { ...row, stock: row.stock - ordered.quantity }
+    })
+
+    // 2. Update UI immediately
+    setStockRows(deducted)
+
+    // 3. Build bill
+    const billLines = activeItems.map((item) => {
+      const row = stockRows.find((r) => r.name.toLowerCase() === item.itemName.toLowerCase())!
+      return {
+        itemName: item.itemName,
+        quantity: item.quantity,
+        measurement: item.measurement,
+        unitPrice: row.price,
+        lineTotal: row.price * item.quantity,
+      }
+    })
+    const billAmount = billLines.reduce((s, l) => s + l.lineTotal, 0)
+
+    // 4. Persist order as approved in localStorage
+    updateOrderStatus(orderId, 'approved', { billLines, billAmount })
+    loadOrdersAndDeliveries()
+
+    // 5. Notify customer
+    addNotification({
+      customerEmail: order.customerEmail,
+      orderId: order.id,
+      message: `Order #${order.id} approved! Bill total: ₹${billAmount}.`,
+      type: 'approval',
+    })
+
+    const rejectedCount = order.items.filter((i) => i.rejected).length
+    showToast(
       rejectedCount > 0
-        ? `Order #${orderId} partially approved. Bill: ₹${result.order.billAmount} (${rejectedCount} item(s) removed).`
-        : `Order #${orderId} approved. Bill: ₹${result.order.billAmount}`
+        ? `Order #${orderId} partially approved. Bill: ₹${billAmount} (${rejectedCount} item(s) removed).`
+        : `Order #${orderId} approved. Bill: ₹${billAmount}`
     )
-    refresh()
+
+    // 6. Push deducted quantities to SQL server in background
+    await Promise.allSettled(
+      activeItems.map((item) => {
+        const row = deducted.find((r) => r.name.toLowerCase() === item.itemName.toLowerCase())
+        if (!row) return Promise.resolve()
+        return updateStock({ itemName: row.name, availableQuantity: row.stock })
+      })
+    )
+
+    setApprovingId(null)
   }
 
+  // ── Reject item ─────────────────────────────────────────────────────────────
+
   const handleRejectItem = (orderId: number, itemIndex: number) => {
-    const updated = rejectOrderItem(orderId, itemIndex)
-    if (updated) {
-      const item = updated.items[itemIndex]
-      setToast(`"${item.itemName}" removed from order — customer notified.`)
-      refresh()
-    }
+    const order = orders.find((o) => o.id === orderId)
+    if (!order) return
+    const item = order.items[itemIndex]
+    if (!item || item.rejected) return
+
+    const row = stockRows.find((r) => r.name.toLowerCase() === item.itemName.toLowerCase())
+    const reason = row
+      ? `"${item.itemName}" unavailable — only ${row.stock} ${row.unit} in stock.`
+      : `"${item.itemName}" is not listed in today's stock.`
+
+    const updatedItems = order.items.map((it, idx) =>
+      idx === itemIndex ? { ...it, rejected: true, rejectionReason: reason } : it
+    )
+    updateOrderItems(orderId, updatedItems)
+    addNotification({
+      customerEmail: order.customerEmail,
+      orderId: order.id,
+      message: `Item "${item.itemName}" removed from order #${order.id}: ${reason}`,
+      type: 'rejection',
+    })
+    showToast(`"${item.itemName}" removed from order — customer notified.`)
+    loadOrdersAndDeliveries()
   }
+
+  // ── Reject entire order ─────────────────────────────────────────────────────
 
   const handleReject = () => {
     if (!rejectingOrderId || !rejectReason.trim()) return
-    rejectOrder(rejectingOrderId, rejectReason.trim())
+    const order = orders.find((o) => o.id === rejectingOrderId)
+    if (order) {
+      updateOrderStatus(rejectingOrderId, 'rejected')
+      addNotification({
+        customerEmail: order.customerEmail,
+        orderId: order.id,
+        message: rejectReason.trim(),
+        type: 'rejection',
+      })
+    }
     setRejectingOrderId(null)
     setRejectReason('')
-    setToast('Order rejected — customer will receive a notification.')
-    refresh()
+    showToast('Order rejected — customer will receive a notification.')
+    loadOrdersAndDeliveries()
   }
 
+  // ── Send to delivery ────────────────────────────────────────────────────────
+
   const handleSendDelivery = (orderId: number) => {
-    const assignment = sendToDelivery(orderId)
-    if (assignment) {
-      setToast(`Order #${orderId} reported to delivery partner.`)
-      refresh()
+    const order = orders.find((o) => o.id === orderId)
+    if (!order || order.status !== 'approved' || !order.billLines || order.billAmount === undefined) return
+
+    updateOrderStatus(orderId, 'sent_to_delivery', { sentToDeliveryAt: new Date().toLocaleString() })
+
+    const assignment: DeliveryAssignment = {
+      id: Date.now(),
+      orderId: order.id,
+      customerName: order.customerName,
+      customerAddress: order.customerAddress,
+      customerPhone: order.customerPhone,
+      billAmount: order.billAmount,
+      items: order.items.filter((i) => !i.rejected),
+      billLines: order.billLines,
+      status: 'assigned',
+      assignedAt: new Date().toLocaleString(),
     }
+    saveDelivery(assignment)
+    showToast(`Order #${orderId} reported to delivery partner.`)
+    loadOrdersAndDeliveries()
   }
+
+  // ── Helpers for order item checks ───────────────────────────────────────────
+
+  function itemStockStatus(itemName: string, quantity: number) {
+    const row = stockRows.find((r) => r.name.toLowerCase() === itemName.toLowerCase())
+    if (!row) return { ok: false, label: 'Not listed', avail: 0 }
+    if (row.stock < quantity) return { ok: false, label: `Only ${row.stock} ${row.unit}`, avail: row.stock }
+    return { ok: true, label: `${row.stock} ${row.unit} avail.`, avail: row.stock }
+  }
+
+  function orderCanApprove(order: StoreOrder) {
+    if (order.status !== 'pending') return false
+    const active = order.items.filter((i) => !i.rejected)
+    if (active.length === 0) return false
+    return active.every((item) => itemStockStatus(item.itemName, item.quantity).ok)
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
 
   return (
     <div className="dashboard">
@@ -177,7 +343,7 @@ export default function OwnerDashboard() {
         <div className="owner-stats">
           <div className="stat-card">
             <h3>Products in stock</h3>
-            <p>{products.length}</p>
+            <p>{stockRows.length}</p>
           </div>
           <div className="stat-card stat-card--blue">
             <h3>Pending orders</h3>
@@ -201,6 +367,7 @@ export default function OwnerDashboard() {
           </button>
         </nav>
 
+        {/* ── STOCK TAB ── */}
         {tab === 'stock' && (
           <section className="dashboard-panel owner-panel">
             <h2>Morning Stock Update</h2>
@@ -228,7 +395,7 @@ export default function OwnerDashboard() {
                   <option value="pcs">pcs</option>
                 </select>
               </div>
-              <button type="submit" className="btn-primary">{editingId ? 'Update Product' : 'Add Product'}</button>
+              <button type="submit" className="btn-primary">{editingId ? 'Update Product' : 'Add / Update Stock'}</button>
               {editingId && (
                 <button type="button" className="btn-secondary" onClick={() => { setEditingId(null); setProductForm({ name: '', stock: '', price: '', unit: 'kg' }) }}>
                   Cancel
@@ -236,33 +403,28 @@ export default function OwnerDashboard() {
               )}
             </form>
 
-            <h3 className="section-heading">Today&apos;s Product List</h3>
+            <h3 className="section-heading">Today's Stock</h3>
             {loadingStock && <p className="row-muted">Loading stock from server…</p>}
-            {products.length === 0 ? (
-              <p className="empty-state">No products yet. Add your morning stock above.</p>
+            {!loadingStock && stockRows.length === 0 ? (
+              <p className="empty-state">No stock yet. Add products above.</p>
             ) : (
               <table className="order-table">
                 <thead>
                   <tr>
                     <th>Product</th>
-                    <th>Stock</th>
+                    <th>Available</th>
                     <th>Price</th>
-                    <th>Updated</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {products.map((p) => (
-                    <tr key={p.id}>
-                      <td><strong>{p.name}</strong></td>
-                      <td>{p.stock} {p.unit}</td>
-                      <td>₹{p.price} / {p.unit}</td>
-                      <td className="row-muted">{p.updatedAt}</td>
+                  {stockRows.map((row) => (
+                    <tr key={row.stockId}>
+                      <td><strong>{row.name}</strong></td>
+                      <td>{row.stock} {row.unit}</td>
+                      <td>₹{row.price} / {row.unit}</td>
                       <td>
-                        <div className="owner-actions">
-                          <button type="button" className="btn-sm btn-sm--edit" onClick={() => startEdit(p)}>Edit</button>
-                          <button type="button" className="btn-sm btn-sm--danger" onClick={() => { deleteProduct(p.id); refresh(); setToast('Product removed.') }}>Remove</button>
-                        </div>
+                        <button type="button" className="btn-sm btn-sm--edit" onClick={() => startEdit(row)}>Edit</button>
                       </td>
                     </tr>
                   ))}
@@ -272,19 +434,21 @@ export default function OwnerDashboard() {
           </section>
         )}
 
+        {/* ── ORDERS TAB ── */}
         {tab === 'orders' && (
           <section className="dashboard-panel owner-panel">
             <h2>Customer Order Requests</h2>
-            <p>Check stock per item, reject unavailable products, then approve the rest to generate the bill.</p>
+            <p>Check stock per item, reject unavailable products, then approve to generate the bill.</p>
 
             {pendingOrders.length === 0 && approvedOrders.length === 0 ? (
               <p className="empty-state">No customer orders right now.</p>
             ) : (
               <div className="owner-order-list">
                 {[...pendingOrders, ...approvedOrders].map((order) => {
-                  const stockCheck = checkOrderStock(order)
                   const activeItems = order.items.filter((i) => !i.rejected)
-                  const canApprove = order.status === 'pending' && activeItems.length > 0 && stockCheck.ok
+                  const canApprove = orderCanApprove(order)
+                  const allStockOk = activeItems.every((item) => itemStockStatus(item.itemName, item.quantity).ok)
+
                   return (
                     <article key={order.id} className="owner-order-card">
                       <header className="owner-order-card__head">
@@ -308,15 +472,13 @@ export default function OwnerDashboard() {
                             <th>Item</th>
                             <th>Qty</th>
                             <th>Unit</th>
-                            <th>Stock check</th>
+                            <th>Stock</th>
                             {order.status === 'pending' && <th>Action</th>}
                           </tr>
                         </thead>
                         <tbody>
                           {order.items.map((item, idx) => {
-                            const availability = item.rejected ? null : checkItemAvailability(item)
-                            const product = products.find((p) => p.name.toLowerCase() === item.itemName.toLowerCase())
-                            const inStock = availability?.ok ?? false
+                            const status = item.rejected ? null : itemStockStatus(item.itemName, item.quantity)
                             return (
                               <tr key={idx} className={item.rejected ? 'owner-order-item--rejected' : undefined}>
                                 <td>{item.itemName}</td>
@@ -324,31 +486,21 @@ export default function OwnerDashboard() {
                                 <td>{item.measurement}</td>
                                 <td>
                                   {item.rejected ? (
-                                    <span className="stock-tag stock-tag--bad" title={item.rejectionReason}>
-                                      Rejected
-                                    </span>
-                                  ) : !product ? (
-                                    <span className="stock-tag stock-tag--bad">Not listed</span>
-                                  ) : inStock ? (
-                                    <span className="stock-tag stock-tag--ok">{product.stock} {product.unit} avail.</span>
+                                    <span className="stock-tag stock-tag--bad">Rejected</span>
+                                  ) : status?.ok ? (
+                                    <span className="stock-tag stock-tag--ok">{status.label}</span>
                                   ) : (
-                                    <span className="stock-tag stock-tag--bad">Only {product.stock} left</span>
+                                    <span className="stock-tag stock-tag--bad">{status?.label ?? 'Not listed'}</span>
                                   )}
                                 </td>
                                 {order.status === 'pending' && (
                                   <td>
-                                    {!item.rejected && !inStock && (
-                                      <button
-                                        type="button"
-                                        className="btn-sm btn-sm--danger"
-                                        onClick={() => handleRejectItem(order.id, idx)}
-                                      >
+                                    {!item.rejected && status && !status.ok && (
+                                      <button type="button" className="btn-sm btn-sm--danger" onClick={() => handleRejectItem(order.id, idx)}>
                                         Reject Item
                                       </button>
                                     )}
-                                    {item.rejected && (
-                                      <span className="row-muted">{item.rejectionReason}</span>
-                                    )}
+                                    {item.rejected && <span className="row-muted">{item.rejectionReason}</span>}
                                   </td>
                                 )}
                               </tr>
@@ -357,7 +509,7 @@ export default function OwnerDashboard() {
                         </tbody>
                       </table>
 
-                      {!stockCheck.ok && order.status === 'pending' && activeItems.length > 0 && (
+                      {!allStockOk && order.status === 'pending' && activeItems.length > 0 && (
                         <div className="owner-stock-warning">
                           ⚠️ Some items are unavailable. Use <strong>Reject Item</strong> on each unavailable product, then approve the rest.
                         </div>
@@ -365,16 +517,13 @@ export default function OwnerDashboard() {
 
                       {activeItems.length === 0 && order.status === 'pending' && (
                         <div className="owner-stock-warning">
-                          ⚠️ All items have been rejected. Reject the entire order or wait for a new request.
+                          ⚠️ All items rejected. Reject the entire order.
                         </div>
                       )}
 
                       {order.billLines && (
                         <div className="owner-bill">
-                          <h4>
-                            Generated Bill — ₹{order.billAmount}
-                            {order.items.some((i) => i.rejected) && ' (available items only)'}
-                          </h4>
+                          <h4>Generated Bill — ₹{order.billAmount}{order.items.some((i) => i.rejected) && ' (available items only)'}</h4>
                           <table className="order-table">
                             <thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
                             <tbody>
@@ -396,16 +545,18 @@ export default function OwnerDashboard() {
                           <button
                             type="button"
                             className="btn-primary"
-                            disabled={!canApprove}
+                            disabled={!canApprove || approvingId === order.id}
                             onClick={() => handleApprove(order.id)}
                           >
-                            {activeItems.length === 0
-                              ? 'No items to approve'
-                              : stockCheck.ok
-                                ? activeItems.length < order.items.length
-                                  ? 'Approve Available Items & Generate Bill'
-                                  : 'Approve & Generate Bill'
-                                : 'Reject unavailable items first'}
+                            {approvingId === order.id
+                              ? 'Approving…'
+                              : activeItems.length === 0
+                                ? 'No items to approve'
+                                : canApprove
+                                  ? activeItems.length < order.items.length
+                                    ? 'Approve Available Items & Generate Bill'
+                                    : 'Approve & Generate Bill'
+                                  : 'Reject unavailable items first'}
                           </button>
                           <button type="button" className="btn-secondary" onClick={() => setRejectingOrderId(order.id)}>
                             Reject Entire Order
@@ -428,12 +579,13 @@ export default function OwnerDashboard() {
           </section>
         )}
 
+        {/* ── DELIVERY TAB ── */}
         {tab === 'delivery' && (
           <section className="dashboard-panel owner-panel">
             <h2>Delivery Queue</h2>
             <p>Orders approved and reported to delivery partners.</p>
 
-            {deliveries.length === 0 && sentOrders.length === 0 ? (
+            {deliveries.length === 0 ? (
               <p className="empty-state">No orders sent to delivery yet.</p>
             ) : (
               <div className="owner-order-list">
@@ -441,7 +593,7 @@ export default function OwnerDashboard() {
                   <article key={d.id} className="owner-order-card">
                     <header className="owner-order-card__head">
                       <strong>Delivery #{d.id} — Order #{d.orderId}</strong>
-                      <span className={`owner-status owner-status--sent_to_delivery`}>{d.status}</span>
+                      <span className="owner-status owner-status--sent_to_delivery">{d.status}</span>
                     </header>
                     <div className="owner-order-card__customer">
                       <span>👤 {d.customerName}</span>
@@ -474,11 +626,11 @@ export default function OwnerDashboard() {
         <div className="owner-modal-overlay" onClick={() => setRejectingOrderId(null)}>
           <div className="owner-modal" onClick={(e) => e.stopPropagation()}>
             <h3>Reject Order #{rejectingOrderId}</h3>
-            <p>This will send a popup notification to the customer.</p>
+            <p>This will send a notification to the customer.</p>
             <textarea
               className="auth-input"
               rows={3}
-              placeholder="Reason (e.g. Tomato out of stock)"
+              placeholder="Reason (e.g. Out of stock)"
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
             />
@@ -491,4 +643,15 @@ export default function OwnerDashboard() {
       )}
     </div>
   )
+}
+
+// ── helpers that import is not available yet ──────────────────────────────────
+function updateOrderItems(orderId: number, items: StoreOrder['items']) {
+  const ORDERS_KEY = 'freshmart_orders'
+  try {
+    const raw = localStorage.getItem(ORDERS_KEY)
+    const orders: StoreOrder[] = raw ? JSON.parse(raw) : []
+    const updated = orders.map((o) => o.id === orderId ? { ...o, items } : o)
+    localStorage.setItem(ORDERS_KEY, JSON.stringify(updated))
+  } catch { /* ignore */ }
 }

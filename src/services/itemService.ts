@@ -27,6 +27,27 @@ export type ApiOrderItem = {
   price: number
 }
 
+export type NewOrderRequest = {
+  customerEmail: string
+  customerName: string
+  customerPhone: string
+  customerAddress: string
+  items: NewItem[]
+}
+
+export type ApiOrder = {
+  id: number
+  customerEmail: string
+  customerName: string
+  customerPhone: string
+  customerAddress: string
+  items: ApiOrderItem[]
+  status: string
+  submittedAt: string
+  billAmount?: number
+  rejectionReason?: string
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -69,6 +90,24 @@ export async function getStock() {
 
 export async function getItems() {
   return request<ApiOrderItem[]>('/getitems')
+}
+
+/** Submit a full order to the orders API. */
+export async function submitOrderApi(order: NewOrderRequest) {
+  return request<ApiOrder>('/Insertorder', {
+    method: 'POST',
+    body: JSON.stringify(order)
+  })
+}
+
+/** Fetch all orders from the API. */
+export async function getOrdersApi() {
+  return request<ApiOrder[]>('/getorders')
+}
+
+/** Fetch orders for a specific customer by email. */
+export async function getOrdersByCustomerApi(email: string) {
+  return request<ApiOrder[]>(`/getorders/${encodeURIComponent(email)}`)
 }
 
 export function isValidApiOrderItem(item: ApiOrderItem) {
