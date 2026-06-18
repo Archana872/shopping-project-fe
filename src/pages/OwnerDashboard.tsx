@@ -15,6 +15,7 @@ import type { DeliveryAssignment, StoreOrder } from '../types/store'
 import type { ApiStockItem } from '../services/itemService'
 import '../styles/dashboard.css'
 import '../styles/owner-dashboard.css'
+import { deleteStock } from '../services/stockService'
 
 type OwnerTab = 'stock' | 'orders' | 'delivery'
 
@@ -164,6 +165,21 @@ const startEdit = (row: StockRow) => {
     price: row.price.toString(),
     unit: row.unit
   })
+}
+const handleDeleteStock = async (stockId: number) => {
+  try {
+    await deleteStock(stockId)
+
+    showToast('Stock deleted successfully')
+
+    await loadStock()
+  } catch (err) {
+    showToast(
+      err instanceof Error
+        ? err.message
+        : 'Failed to delete stock'
+    )
+  }
 }
   // ── Approve order ───────────────────────────────────────────────────────────
 
@@ -442,6 +458,17 @@ const startEdit = (row: StockRow) => {
                       <td>₹{row.price} / {row.unit}</td>
                       <td>
                         <button type="button" className="btn-sm btn-sm--edit" onClick={() => startEdit(row)}>Edit</button>
+                      <button
+  type="button"
+  className="btn-sm btn-sm--danger"
+  onClick={async () => {
+    await deleteStock(row.stockId)
+    await loadStock()
+  }}
+>
+  Delete
+</button>
+                      
                       </td>
                     </tr>
                   ))}

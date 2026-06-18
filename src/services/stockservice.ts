@@ -20,4 +20,18 @@ export async function addStock(stock: StockRequest) {
 
   return await res.json();
 }
+export async function deleteStock(stockId: number) {
+  const res = await fetch(
+    `https://localhost:44399/api/stock/${stockId}`,
+    {
+      method: 'DELETE'
+    }
+  )
 
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+
+  return await res.text()
+  
+}
