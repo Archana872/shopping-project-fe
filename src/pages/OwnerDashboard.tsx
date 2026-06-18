@@ -119,6 +119,14 @@ export default function OwnerDashboard() {
 
       showToast('Stock updated successfully')
     } else {
+      console.log({
+  itemName: productForm.name.trim(),
+  availableQuantity: qty,
+  measurement: productForm.unit,
+  price: price
+})
+      
+
       await addStock({
         itemName: productForm.name.trim(),
         availableQuantity: qty,
@@ -147,7 +155,16 @@ export default function OwnerDashboard() {
     )
   }
 }
+const startEdit = (row: StockRow) => {
+  setEditingId(row.stockId)
 
+  setProductForm({
+    name: row.name,
+    stock: row.stock.toString(),
+    price: row.price.toString(),
+    unit: row.unit
+  })
+}
   // ── Approve order ───────────────────────────────────────────────────────────
 
   const handleApprove = async (orderId: number) => {
@@ -653,5 +670,6 @@ function updateOrderItems(orderId: number, items: StoreOrder['items']) {
     const orders: StoreOrder[] = raw ? JSON.parse(raw) : []
     const updated = orders.map((o) => o.id === orderId ? { ...o, items } : o)
     localStorage.setItem(ORDERS_KEY, JSON.stringify(updated))
-  } catch { /* ignore */ }
+  } catch { /* ignore */ }  
+  
 }

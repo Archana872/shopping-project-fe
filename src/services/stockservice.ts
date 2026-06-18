@@ -20,3 +20,4 @@ export async function addStock(stock: StockRequest) {
 
   return await res.json();
 }
+
