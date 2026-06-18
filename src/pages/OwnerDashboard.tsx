@@ -17,7 +17,7 @@ import {
   syncProductsFromApi,
   updateProduct
 } from '../utils/storeStorage'
-import { getStock, updateStock } from '../services/itemService'
+import { createItem, getStock, updateStock } from '../services/itemService'
 import type { DeliveryAssignment, Product, StoreOrder } from '../types/store'
 import '../styles/dashboard.css'
 import '../styles/owner-dashboard.css'
@@ -45,11 +45,10 @@ export default function OwnerDashboard() {
     try {
       const stock = await getStock()
       syncProductsFromApi(stock)
-      setProducts(getProducts())
     } catch (err) {
-      setProducts(getProducts())
       setApiError(err instanceof Error ? err.message : 'Failed to load stock from server.')
     } finally {
+      setProducts(getProducts())
       setLoadingStock(false)
     }
     setOrders(getOrders())
@@ -82,28 +81,67 @@ export default function OwnerDashboard() {
     if (!productForm.name.trim() || stock < 0 || price <= 0) return
 
     const itemName = productForm.name.trim()
+    const unit = productForm.unit
 
-    try {
-      await updateStock({ itemName, availableQuantity: stock })
+    if (editingId) {
+      // --- EDIT existing product ---
+      // 1. Update locally first so the table updates immediately
+      updateProduct(editingId, { name: itemName, stock, price, unit })
+      setProducts(getProducts())
+      setEditingId(null)
+      setProductForm({ name: '', stock: '', price: '', unit: 'kg' })
 
-      if (editingId) {
-        updateProduct(editingId, {
-          name: itemName,
-          stock,
-          price,
-          unit: productForm.unit
-        })
-        setEditingId(null)
-        setToast('Stock updated on server.')
-      } else {
-        saveProduct({ name: itemName, stock, price, unit: productForm.unit })
-        setToast('Product added and stock synced to server.')
+      // 2. Sync to API in background
+      try {
+        await updateStock({ itemName, availableQuantity: stock })
+        setToast('Stock updated.')
+      } catch (err) {
+        setToast('Saved locally. Server sync failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
+      }
+      await refresh()
+    } else {
+      // --- ADD new product ---
+      // 1. Save locally immediately so the UI shows it right away
+      saveProduct({ name: itemName, stock, price, unit })
+      setProducts(getProducts())
+      setProductForm({ name: '', stock: '', price: '', unit: 'kg' })
+      setToast('Product added.')
+
+      // 2. Try to create on the server
+      let serverSynced = false
+      try {
+        await createItem({ itemName, quantity: stock, measurement: unit })
+        serverSynced = true
+      } catch {
+        // createItem failed — try updateStock as a fallback
+        try {
+          await updateStock({ itemName, availableQuantity: stock })
+          serverSynced = true
+        } catch {
+          console.warn('Server unreachable — new product saved locally only.')
+        }
       }
 
-      setProductForm({ name: '', stock: '', price: '', unit: 'kg' })
-      await refresh()
-    } catch (err) {
-      setToast(err instanceof Error ? err.message : 'Failed to update stock on server.')
+      // 3. Refresh from server, but only sync if server returned the new product
+      //    so we don't accidentally wipe the locally-added item
+      try {
+        const serverStock = await getStock()
+        const serverHasNewItem = serverStock.some(
+          (s) => s.itemName.trim().toLowerCase() === itemName.toLowerCase()
+        )
+        if (serverHasNewItem || !serverSynced) {
+          // Safe to overwrite — server reflects our new product, or we never pushed it
+          syncProductsFromApi(serverStock)
+        }
+        // If server synced but doesn't have our item yet (async lag),
+        // keep local localStorage as-is (our product is still there)
+      } catch {
+        // API down — local state is fine as-is
+      }
+
+      setProducts(getProducts())
+      setOrders(getOrders())
+      setDeliveries(getDeliveries())
     }
   }
 
