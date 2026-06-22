@@ -1,0 +1,63 @@
+:root{
+  --bg: #f8fafc;
+  --card:#ffffff;
+  --muted:#475569;
+  --accent:#2563eb;
+  --accent-2:#10b981;
+  --shadow: 0 12px 30px rgba(15,23,42,0.08);
+}
+
+html,body,#root{height:100%;}
+body{
+  margin:0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  background: linear-gradient(180deg,#eef2ff 0%, #ffffff 100%);
+  color: #0f172a;
+}
+
+.centered{max-width:1100px;margin:0 auto;padding:24px;}
+
+.role-landing{display:flex;align-items:center;justify-content:center;min-height:100vh}
+.role-grid{display:flex;gap:16px;width:100%;max-width:980px}
+.role-card{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;padding:22px;border-radius:14px;background:var(--card);box-shadow:var(--shadow);border:1px solid #eef2ff;cursor:pointer;transition:transform .18s,box-shadow .18s}
+.role-card:hover{transform:translateY(-6px);box-shadow:0 20px 40px rgba(37,99,235,0.08)}
+.role-emoji{font-size:44px}
+.role-title{font-weight:800;font-size:18px}
+.role-sub{color:var(--muted);font-size:13px;text-align:center}
+
+.dashboard-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+.dash-nav{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:12px 18px;border-radius:12px;background:var(--card);border:1px solid #e6e9ef;cursor:pointer;min-width:160px;justify-content:center;transition:all .16s}
+.nav-item.active{border:2px solid var(--accent);box-shadow:0 8px 28px rgba(37,99,235,0.08);background:linear-gradient(90deg,#eff6ff,#f8fbff)}
+.panel{background:var(--card);border-radius:16px;padding:28px;box-shadow:var(--shadow)}
+
+table{width:100%;border-collapse:collapse}
+th,td{padding:12px 8px;border-bottom:1px solid #eef2ff;text-align:left}
+
+.btn{padding:10px 14px;border-radius:10px;border:none;cursor:pointer}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-success{background:var(--accent-2);color:#fff}
+
+/* Owner specific layout */
+.owner-layout{display:flex;gap:20px}
+.owner-sidebar{width:220px;display:flex;flex-direction:column;gap:10px}
+.owner-sidebar .nav-item{justify-content:flex-start;padding:12px 14px}
+.owner-content{flex:1}
+
+.form-row{display:flex;gap:10px;align-items:center;margin-top:12px}
+.form-row input{padding:10px;border-radius:10px;border:1px solid #e6e9ef}
+
+.badge{padding:6px 10px;border-radius:999px;font-weight:700;font-size:13px}
+.badge.pending{background:#fff7ed;color:#92400e}
+.badge.confirmed{background:#ecfeff;color:#0f766e}
+.badge.rejected{background:#fee2e2;color:#991b1b}
+
+.table-actions button{margin-right:8px}
+
+/* inputs */
+input, select { font-family: inherit }
+
+@media(max-width:800px){
+  .role-grid{flex-direction:column}
+  .nav-item{min-width:unset;width:100%}
+}
