@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
+import PromoPopup from '../components/PromoPopup'
 
 interface Order {
   id: number
@@ -20,6 +21,19 @@ const products = [
 const statuses = ['Order Placed', 'Confirmed', 'Packing', 'Out for Delivery', 'Delivered']
 
 export default function DashboardPage({ onLogout }: DashboardPageProps) {
+  const [showPromo, setShowPromo] = useState(false)
+
+  useEffect(() => {
+    try {
+      const flag = localStorage.getItem('showPromo')
+      if (flag === 'true') {
+        setShowPromo(true)
+        localStorage.removeItem('showPromo')
+      }
+    } catch (e) {
+      /* ignore storage errors */
+    }
+  }, [])
   const [activeTab, setActiveTab] = useState<'home' | 'order' | 'orders' | 'bills' | 'track'>('home')
   const [selectedProduct, setSelectedProduct] = useState(products[0].name)
   const [quantity, setQuantity] = useState(1)
@@ -48,6 +62,15 @@ export default function DashboardPage({ onLogout }: DashboardPageProps) {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', color: '#1f2937', padding: 24 }}>
+      {showPromo && (
+        <PromoPopup
+          onClose={() => setShowPromo(false)}
+          onShop={() => {
+            setShowPromo(false)
+            setActiveTab('order')
+          }}
+        />
+      )}
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <div>

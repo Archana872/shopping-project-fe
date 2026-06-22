@@ -11,7 +11,14 @@ function App() {
       {page === 'login' && (
         <LoginPage
           onRegister={() => setPage('register')}
-          onLoginSuccess={() => setPage('dashboard')}
+          onLoginSuccess={() => {
+            try {
+              localStorage.setItem('showPromo', 'true')
+            } catch (e) {
+              /* ignore storage errors */
+            }
+            setPage('dashboard')
+          }}
         />
       )}
       {page === 'register' && (

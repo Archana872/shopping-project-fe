@@ -109,3 +109,76 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* Promo popup animations */
+.promo-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 23, 0.45);
+  z-index: 9999;
+  animation: fadeIn 240ms ease-out;
+}
+
+.promo-modal {
+  width: 340px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fff, #f7fdf6);
+  padding: 20px;
+  box-shadow: 0 20px 50px rgba(2, 6, 23, 0.35);
+  text-align: center;
+  transform-origin: center;
+  animation: popIn 360ms cubic-bezier(.22,1,.36,1);
+}
+
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-6px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Veggie illustrations */
+.promo-veggies {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+.veggie {
+  width: 46px;
+  height: 46px;
+  display: block;
+  transform-origin: center;
+  animation: float 3000ms ease-in-out infinite;
+}
+.veggie.carrot { animation-delay: 0ms; }
+.veggie.lettuce { animation-delay: 120ms; }
+.veggie.broccoli { animation-delay: 240ms; }
+
+@keyframes float {
+  0% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-6px) rotate(-2deg); }
+  100% { transform: translateY(0) rotate(0deg); }
+}
+
+.promo-modal .veggie:hover { transform: translateY(-8px) scale(1.06); transition: transform 140ms ease; }
