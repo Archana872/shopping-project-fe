@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import { getSession, type Customer } from '../../utils/authStorage'
-import { getOrdersByCustomer } from '../../utils/storeStorage'
+import { confirmDeliveryOtp, getDeliveryByOrderId, getOrdersByCustomer } from '../../utils/storeStorage'
 import { getOrdersByCustomerApi, type ApiOrder } from '../../services/itemService'
-import type { StoreOrder } from '../../types/store'
+import LiveDeliveryCard from '../../components/LiveDeliveryCard'
+import LiveDeliveryMap from '../../components/LiveDeliveryMap'
+import type { DeliveryAssignment, StoreOrder } from '../../types/store'
+import '../../styles/live-delivery.css'
 
 const TRACK_STEPS = ['Order Placed', 'Confirmed', 'Packing', 'Out for Delivery', 'Delivered'] as const
 
@@ -35,36 +38,91 @@ function toDisplayOrder(o: StoreOrder | ApiOrder): DisplayOrder {
 
 export default function TrackOrderPage() {
   const [orders, setOrders] = useState<DisplayOrder[]>([])
+  const [delivery, setDelivery] = useState<DeliveryAssignment | null>(null)
+  const [otpInput, setOtpInput] = useState('')
+  const [proofFile, setProofFile] = useState<File | null>(null)
+  const [proofPreview, setProofPreview] = useState<string | null>(null)
+  const [verificationError, setVerificationError] = useState('')
+  const [confirmationMessage, setConfirmationMessage] = useState('')
   const [apiError, setApiError] = useState('')
 
   useEffect(() => {
+    if (!proofFile) {
+      setProofPreview(null)
+      return
+    }
+
+    const url = URL.createObjectURL(proofFile)
+    setProofPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [proofFile])
+
+  useEffect(() => {
+    let active = true
+
     const loadOrders = async () => {
       const session = getSession()
       if (!session || session.role !== 'customer') return
 
       const customer = session.user as Customer
+      let latestOrder: StoreOrder | undefined
 
       try {
-        // Try API first
         const apiOrders = await getOrdersByCustomerApi(customer.email)
         if (Array.isArray(apiOrders) && apiOrders.length > 0) {
+          if (!active) return
           setOrders(apiOrders.map(toDisplayOrder))
           setApiError('')
-          return
+          latestOrder = apiOrders[apiOrders.length - 1] as StoreOrder
         }
       } catch {
         // Fall back to localStorage silently
       }
 
-      // localStorage fallback
-      const localOrders = getOrdersByCustomer(customer.email)
-      setOrders(localOrders.map(toDisplayOrder))
+      if (!latestOrder) {
+        const localOrders = getOrdersByCustomer(customer.email)
+        if (!active) return
+        setOrders(localOrders.map(toDisplayOrder))
+        latestOrder = localOrders[localOrders.length - 1]
+      }
+
+      if (latestOrder) {
+        const assignment = getDeliveryByOrderId(latestOrder.id)
+        setDelivery(assignment ?? null)
+      } else {
+        setDelivery(null)
+      }
     }
 
     loadOrders()
-    const interval = setInterval(loadOrders, 3000)
-    return () => clearInterval(interval)
+    const interval = window.setInterval(loadOrders, 3000)
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
   }, [])
+
+  const handleConfirmOtp = () => {
+    if (!delivery) return
+    if (!otpInput.trim()) {
+      setVerificationError('Enter the OTP from the delivery partner.')
+      setConfirmationMessage('')
+      return
+    }
+
+    const updated = confirmDeliveryOtp(delivery.id, otpInput, proofPreview ?? undefined)
+    if (!updated) {
+      setVerificationError('OTP does not match or delivery cannot be confirmed yet.')
+      setConfirmationMessage('')
+      return
+    }
+
+    setDelivery(updated)
+    setOtpInput('')
+    setProofFile(null)
+    setVerificationError('')
+    setConfirmationMessage('Delivery verified! Your order is now marked delivered.')
+  }
 
   const latestOrder = orders[orders.length - 1]
 
@@ -107,6 +165,72 @@ export default function TrackOrderPage() {
           <p className="status-note">
             Current status: <strong>{latestOrder.status.replace(/_/g, ' ')}</strong>
           </p>
+
+          {delivery && delivery.orderId === latestOrder.id ? (
+            <div style={{ marginTop: 24 }}>
+              <LiveDeliveryCard delivery={delivery} />
+              <LiveDeliveryMap delivery={delivery} />
+
+              <section className="dashboard-panel" style={{ marginTop: 24 }}>
+                <h3>Delivery confirmation</h3>
+                <p>Enter the OTP shown by your rider and optionally upload a delivery proof image.</p>
+
+                {verificationError && <p className="form-error">{verificationError}</p>}
+                {confirmationMessage && <p className="success-text">{confirmationMessage}</p>}
+
+                {delivery.status !== 'delivered' ? (
+                  <div style={{ display: 'grid', gap: 16, marginTop: 18 }}>
+                    <div>
+                      <label htmlFor="deliveryOtp">Delivery OTP</label>
+                      <input
+                        id="deliveryOtp"
+                        type="text"
+                        value={otpInput}
+                        onChange={(e) => setOtpInput(e.target.value)}
+                        placeholder="Enter OTP from rider"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="proofUpload">Delivery proof (optional)</label>
+                      <input
+                        id="proofUpload"
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          setProofFile(file ?? null)
+                        }}
+                      />
+                    </div>
+
+                    {proofPreview && (
+                      <div>
+                        <p style={{ marginBottom: 8 }}>Preview</p>
+                        <img
+                          src={proofPreview}
+                          alt="Delivery proof preview"
+                          style={{ borderRadius: 12, maxWidth: '100%', display: 'block', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}
+                        />
+                      </div>
+                    )}
+
+                    <button type="button" className="btn-primary" onClick={handleConfirmOtp}>
+                      Confirm Delivery
+                    </button>
+                  </div>
+                ) : (
+                  <div className="empty-state" style={{ marginTop: 12 }}>
+                    Delivery confirmed. Thank you for using FreshMart.
+                  </div>
+                )}
+              </section>
+            </div>
+          ) : latestOrder.status === 'sent_to_delivery' ? (
+            <div className="empty-state" style={{ marginTop: 24 }}>
+              Your order has been sent to delivery. Live tracking will appear once the rider begins the route.
+            </div>
+          ) : null}
         </>
       )}
     </section>

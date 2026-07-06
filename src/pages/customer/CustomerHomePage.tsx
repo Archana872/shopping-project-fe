@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getStock, type ApiStockItem } from '../../services/itemService'
+import FreshUnlockPopup from '../../components/FreshUnlockPopup'
+import FreshUnlockMiniBanner from '../../components/FreshUnlockMiniBanner'
 import '../../styles/dashboard.css'
 
 const FALLBACK_PRODUCTS = [
@@ -41,6 +43,7 @@ const CARD_COLORS = ['green', 'orange', 'purple', 'blue', 'green'] as const
 export default function CustomerHomePage() {
   const [stockItems, setStockItems] = useState<ApiStockItem[]>([])
   const [stockLoaded, setStockLoaded] = useState(false)
+  const [showFreshUnlockPopup, setShowFreshUnlockPopup] = useState(true)
 
   useEffect(() => {
     getStock()
@@ -66,6 +69,10 @@ export default function CustomerHomePage() {
 
   return (
     <>
+      {showFreshUnlockPopup && (
+        <FreshUnlockPopup onClose={() => setShowFreshUnlockPopup(false)} />
+      )}
+
       <section className="store-hero">
         <div className="store-hero__bg" aria-hidden="true">🥬🍅🥕</div>
         <div className="store-hero__content">
@@ -82,6 +89,7 @@ export default function CustomerHomePage() {
       </section>
 
       <section className="store-section">
+        <FreshUnlockMiniBanner />
         <h2 className="store-section__title">Quick Actions</h2>
         <div className="store-section__scroll">
           <Link to="/customer/my-order" className="product-card product-card--green">
@@ -110,6 +118,20 @@ export default function CustomerHomePage() {
             <div className="product-card__body">
               <div className="product-card__label">Track Order</div>
               <div className="product-card__sub">Live delivery status</div>
+            </div>
+          </Link>
+          <Link to="/customer/freshness-tracking" className="product-card product-card--green">
+            <div className="product-card__image"><span>🌿</span></div>
+            <div className="product-card__body">
+              <div className="product-card__label">Freshness Tracking</div>
+              <div className="product-card__sub">Monitor veggies from harvest to home</div>
+            </div>
+          </Link>
+          <Link to="/customer/fresh-unlock-market" className="product-card product-card--blue">
+            <div className="product-card__image"><span>🍓</span></div>
+            <div className="product-card__body">
+              <div className="product-card__label">Fresh Unlock Market</div>
+              <div className="product-card__sub">Exclusive deals with unlock rewards</div>
             </div>
           </Link>
         </div>

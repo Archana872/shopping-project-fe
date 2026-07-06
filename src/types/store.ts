@@ -18,6 +18,7 @@ export interface StoreOrderItem {
 export type OrderRequestStatus =
   | 'pending'
   | 'approved'
+  | 'partially_approved'
   | 'rejected'
   | 'sent_to_delivery'
 
@@ -47,14 +48,28 @@ export interface StoreOrder {
 export interface DeliveryAssignment {
   id: number
   orderId: number
+  partnerName: string
+  partnerPhone: string
   customerName: string
+  customerEmail: string
   customerAddress: string
   customerPhone: string
   billAmount: number
   items: StoreOrderItem[]
   billLines: BillLine[]
-  status: 'assigned' | 'in_transit' | 'delivered'
+  status: 'assigned' | 'picked_up' | 'in_transit' | 'near_destination' | 'delivered'
   assignedAt: string
+  startedAt?: string
+  deliveredAt?: string
+  currentLat: number
+  currentLng: number
+  destinationLat: number
+  destinationLng: number
+  etaMinutes: number
+  freshnessScore: number
+  otpCode: string
+  arrivalDetected?: boolean
+  proofPhotoUrl?: string
 }
 
 export interface CustomerNotification {
@@ -62,7 +77,7 @@ export interface CustomerNotification {
   customerEmail: string
   orderId: number
   message: string
-  type: 'rejection' | 'approval'
+  type: 'rejection' | 'approval' | 'delivery'
   read: boolean
   createdAt: string
 }

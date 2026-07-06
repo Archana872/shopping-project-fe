@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { OrderProvider } from '../context/OrderContext'
 import StoreNavbar from '../components/StoreNavbar'
@@ -17,20 +17,45 @@ const customerNav = [
 function CustomerShell({ customer }: { customer: Customer }) {
   const location = useLocation()
   const isHome = location.pathname === '/customer'
+  const [notification, setNotification] = useState<{
+    title: string
+    message: string
+    type: 'delivery' | 'approval' | 'rejection'
+    icon: string
+  } | null>(null)
 
   useEffect(() => {
     const checkNotifications = () => {
-      getUnreadNotifications(customer.email)
-        .filter((n) => n.type === 'rejection')
-        .forEach((n) => {
-          window.alert(`⚠️ Order Unavailable\n\n${n.message}`)
-          markNotificationRead(n.id)
+      const unread = getUnreadNotifications(customer.email)
+      if (unread.length > 0) {
+        const n = unread[0]
+        setNotification({
+          title:
+            n.type === 'delivery'
+              ? 'Delivery Update'
+              : n.type === 'approval'
+              ? 'Good News!'
+              : 'Oops!'
+          ,
+          message: n.message,
+          type: n.type,
+          icon: n.type === 'delivery' ? '🚚' : n.type === 'approval' ? '🌸' : '⚠️'
         })
+        markNotificationRead(n.id)
+      }
     }
     checkNotifications()
     const interval = setInterval(checkNotifications, 4000)
     return () => clearInterval(interval)
   }, [customer.email])
+
+  useEffect(() => {
+    if (!notification) return
+    const timer = window.setTimeout(() => setNotification(null), 7000)
+    return () => window.clearTimeout(timer)
+  }, [notification])
+
+  const closeNotification = () => setNotification(null)
 
   return (
     <OrderProvider>
@@ -79,6 +104,25 @@ function CustomerShell({ customer }: { customer: Customer }) {
             </nav>
           )}
 
+          {notification && (
+            <div className={`customer-notification customer-notification--${notification.type}`}>
+              <div className="customer-notification__icon" aria-hidden="true">
+                {notification.icon}
+              </div>
+              <div className="customer-notification__content">
+                <div className="customer-notification__title">{notification.title}</div>
+                <div className="customer-notification__message">{notification.message}</div>
+              </div>
+              <button
+                type="button"
+                className="customer-notification__close"
+                aria-label="Dismiss notification"
+                onClick={closeNotification}
+              >
+                ×
+              </button>
+            </div>
+          )}
           <Outlet />
         </div>
       </div>

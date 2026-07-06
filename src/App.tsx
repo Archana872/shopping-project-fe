@@ -12,6 +12,8 @@ import MyOrderPage from './pages/customer/MyOrderPage'
 import NewOrderPage from './pages/customer/NewOrderPage'
 import TrackOrderPage from './pages/customer/TrackOrderPage'
 import ItemsOrderedPage from './pages/customer/ItemsOrderedPage'
+import FreshnessDashboard from './pages/customer/FreshnessDashboard'
+import FreshUnlockMarket from './pages/customer/FreshUnlockMarket'
 import OwnerDashboard from './pages/OwnerDashboard'
 import DeliveryDashboard from './pages/DeliveryDashboard'
 import { getSession } from './utils/authStorage'
@@ -39,7 +41,9 @@ export default function App() {
         <Route path="my-order" element={<MyOrderPage />} />
         <Route path="new-order" element={<NewOrderPage />} />
         <Route path="track-order" element={<TrackOrderPage />} />
+        <Route path="freshness-tracking" element={<FreshnessDashboard />} />
         <Route path="items-ordered" element={<ItemsOrderedPage />} />
+        <Route path="fresh-unlock-market" element={<FreshUnlockMarket />} />
       </Route>
 
       <Route path="/owner/login" element={<OwnerLogin />} />

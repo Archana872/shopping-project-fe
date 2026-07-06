@@ -1,0 +1,647 @@
+/* Fresh Unlock Popup */
+.fresh-unlock-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.fresh-unlock-popup {
+  background: white;
+  border-radius: 16px;
+  padding: 32px 24px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  position: relative;
+  animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.fresh-unlock-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #f5f5f5;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fresh-unlock-close:hover {
+  background: #e0e0e0;
+  transform: scale(1.1);
+}
+
+.fresh-unlock-content {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.fresh-unlock-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+  animation: bounce 0.6s ease-in-out;
+}
+
+.fresh-unlock-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0 0 12px 0;
+}
+
+.fresh-unlock-desc {
+  font-size: 14px;
+  color: #666;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.fresh-unlock-desc strong {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+.fresh-unlock-highlight {
+  margin-top: 16px;
+}
+
+.highlight-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.fresh-unlock-btn {
+  display: block;
+  width: 100%;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.fresh-unlock-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(34, 197, 94, 0.3);
+}
+
+/* Fresh Unlock Market Page */
+.fresh-unlock-market {
+  padding: 32px 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.fresh-unlock-market__header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.fresh-unlock-market__title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0 0 12px 0;
+}
+
+.fresh-unlock-market__subtitle {
+  font-size: 16px;
+  color: #666;
+  margin: 0;
+}
+
+/* Progress Section */
+.fresh-unlock-progress-section {
+  margin-bottom: 48px;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.progress-count {
+  background: #f0fdf4;
+  color: #22c55e;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar__fill {
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+  transition: width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  border-radius: 4px;
+}
+
+/* Categories */
+.fresh-unlock-categories {
+  display: grid;
+  gap: 48px;
+}
+
+.fresh-unlock-category {
+  animation: fadeIn 0.5s ease-out;
+}
+
+.category-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0 0 24px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.category-products {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 20px;
+}
+
+/* Product Card */
+.product-unlock-card {
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 20px;
+  text-align: center;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.product-unlock-card.unlocked {
+  border-color: #22c55e;
+  background: linear-gradient(135deg, #f0fdf4, #ffffff);
+}
+
+.product-unlock-card:hover:not(.locked) {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(34, 197, 94, 0.15);
+  border-color: #16a34a;
+}
+
+.lock-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  z-index: 10;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.lock-icon {
+  font-size: 40px;
+}
+
+.lock-text {
+  font-size: 12px;
+  color: white;
+  margin: 0;
+  padding: 0 8px;
+  line-height: 1.4;
+}
+
+.product-unlock-card__content {
+  transition: all 0.3s ease;
+}
+
+.product-unlock-card__content.blurred {
+  filter: blur(3px);
+  opacity: 0.5;
+}
+
+.product-emoji {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.product-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 6px 0;
+}
+
+.product-freshness {
+  font-size: 12px;
+  color: #10b981;
+  margin: 0 0 8px 0;
+  font-weight: 500;
+}
+
+.product-price {
+  font-size: 18px;
+  font-weight: 700;
+  color: #22c55e;
+  margin: 12px 0;
+}
+
+.product-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.btn-add-cart,
+.btn-dollar-unlock {
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-add-cart {
+  background: #f0fdf4;
+  color: #22c55e;
+  border: 2px solid #22c55e;
+}
+
+.btn-add-cart:hover {
+  background: #22c55e;
+  color: white;
+}
+
+.btn-dollar-unlock {
+  background: #22c55e;
+  color: white;
+}
+
+.btn-dollar-unlock:hover {
+  background: #16a34a;
+  transform: scale(1.05);
+}
+
+/* Reward Popup */
+.reward-popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1001;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.reward-popup {
+  background: white;
+  border-radius: 16px;
+  padding: 40px 24px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  position: relative;
+  animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.reward-popup-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #f5f5f5;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reward-popup-close:hover {
+  background: #e0e0e0;
+}
+
+.reward-content {
+  text-align: center;
+}
+
+.reward-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+  animation: bounce 0.6s ease-in-out;
+}
+
+.reward-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0 0 12px 0;
+}
+
+.reward-selected {
+  font-size: 20px;
+  font-weight: 600;
+  color: #22c55e;
+  margin: 0 0 8px 0;
+}
+
+.reward-desc {
+  font-size: 14px;
+  color: #666;
+  line-height: 1.6;
+  margin: 0 0 24px 0;
+}
+
+.reward-desc strong {
+  color: #22c55e;
+  font-weight: 700;
+}
+
+.btn-checkout {
+  width: 100%;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-checkout:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(34, 197, 94, 0.3);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+/* Fresh Unlock Mini Banner */
+.fresh-unlock-mini-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #f0fdf4, #ffffff);
+  border: 2px solid #22c55e;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 24px;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  gap: 12px;
+}
+
+.fresh-unlock-mini-banner:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(34, 197, 94, 0.2);
+  border-color: #16a34a;
+  background: linear-gradient(135deg, #dcfce7, #ffffff);
+}
+
+.mini-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.mini-banner-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.mini-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mini-banner-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.mini-banner-subtitle {
+  font-size: 12px;
+  color: #22c55e;
+  font-weight: 600;
+  margin: 0;
+}
+
+.mini-banner-arrow {
+  font-size: 18px;
+  color: #22c55e;
+  font-weight: 600;
+  transition: transform 0.2s ease;
+}
+
+.fresh-unlock-mini-banner:hover .mini-banner-arrow {
+  transform: translateX(4px);
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .fresh-unlock-popup {
+    padding: 24px 16px;
+    max-width: 90%;
+  }
+
+  .fresh-unlock-market {
+    padding: 20px 12px;
+  }
+
+  .fresh-unlock-market__title {
+    font-size: 24px;
+  }
+
+  .category-products {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 16px;
+  }
+
+  .product-emoji {
+    font-size: 40px;
+  }
+
+  .product-name {
+    font-size: 14px;
+  }
+
+  .reward-popup {
+    padding: 32px 20px;
+  }
+
+  .reward-icon {
+    font-size: 56px;
+  }
+
+  .reward-title {
+    font-size: 20px;
+  }
+
+  .reward-selected {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .fresh-unlock-popup {
+    padding: 20px 12px;
+  }
+
+  .fresh-unlock-title {
+    font-size: 20px;
+  }
+
+  .fresh-unlock-desc {
+    font-size: 13px;
+  }
+
+  .fresh-unlock-market__title {
+    font-size: 20px;
+  }
+
+  .fresh-unlock-market__subtitle {
+    font-size: 14px;
+  }
+
+  .category-title {
+    font-size: 18px;
+  }
+
+  .category-products {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .product-unlock-card {
+    padding: 16px;
+  }
+
+  .product-emoji {
+    font-size: 36px;
+    margin-bottom: 8px;
+  }
+
+  .product-name {
+    font-size: 13px;
+  }
+
+  .product-freshness {
+    font-size: 11px;
+  }
+
+  .product-price {
+    font-size: 16px;
+  }
+
+  .btn-add-cart,
+  .btn-dollar-unlock {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .reward-popup {
+    padding: 24px 16px;
+  }
+
+  .reward-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+  }
+
+  .reward-title {
+    font-size: 18px;
+  }
+
+  .reward-selected {
+    font-size: 16px;
+  }
+}

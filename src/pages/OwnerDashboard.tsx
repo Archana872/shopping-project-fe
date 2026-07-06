@@ -15,14 +15,19 @@ import {
   saveProduct,
   sendToDelivery,
   syncProductsFromApi,
+  updateDeliveryStatus,
   updateProduct
 } from '../utils/storeStorage'
 import { createItem, getStock, updateStock } from '../services/itemService'
+import { getHarvestsApi, updateTimelineApi, updateHarvestApi, type HarvestRecord } from '../services/harvestService'
 import type { DeliveryAssignment, Product, StoreOrder } from '../types/store'
 import '../styles/dashboard.css'
 import '../styles/owner-dashboard.css'
+import '../styles/live-delivery.css'
+import LiveDeliveryMap from '../components/LiveDeliveryMap'
+import OwnerAnalyticsPanel from '../components/OwnerAnalyticsPanel'
 
-type OwnerTab = 'stock' | 'orders' | 'delivery'
+type OwnerTab = 'stock' | 'orders' | 'harvest' | 'delivery'
 
 export default function OwnerDashboard() {
   const session = getSession()
@@ -30,6 +35,10 @@ export default function OwnerDashboard() {
   const [products, setProducts] = useState<Product[]>([])
   const [orders, setOrders] = useState<StoreOrder[]>([])
   const [deliveries, setDeliveries] = useState<DeliveryAssignment[]>([])
+  const [harvests, setHarvests] = useState<HarvestRecord[]>([])
+  const [harvestLoading, setHarvestLoading] = useState(false)
+  const [harvestError, setHarvestError] = useState('')
+  const [freshnessEdits, setFreshnessEdits] = useState<Record<number, { score: string; status: string }>>({})
   const [toast, setToast] = useState('')
 
   const [productForm, setProductForm] = useState({ name: '', stock: '', price: '', unit: 'kg' })
@@ -56,8 +65,64 @@ export default function OwnerDashboard() {
   }, [])
 
   useEffect(() => {
+    if (tab !== 'delivery') return
+    const interval = window.setInterval(() => {
+      setDeliveries((prev) =>
+        prev.map((delivery) => {
+          if (delivery.status === 'delivered') return delivery
+
+          const drift = delivery.status === 'assigned' ? 0.0002 : 0.0004
+          const nextLat = delivery.currentLat + drift
+          const nextLng = delivery.currentLng + drift * 0.9
+          const eta = Math.max(0, delivery.etaMinutes - 1)
+          const distance = Math.hypot(delivery.destinationLat - nextLat, delivery.destinationLng - nextLng)
+          const arrival = distance < 0.00035
+
+          return {
+            ...delivery,
+            currentLat: nextLat,
+            currentLng: nextLng,
+            etaMinutes: eta,
+            status: arrival
+              ? 'near_destination'
+              : delivery.status === 'assigned'
+              ? 'picked_up'
+              : delivery.status === 'picked_up'
+              ? 'in_transit'
+              : delivery.status,
+            arrivalDetected: arrival || delivery.arrivalDetected
+          }
+        })
+      )
+    }, 8000)
+
+    return () => window.clearInterval(interval)
+  }, [tab])
+
+  const refreshHarvests = useCallback(async () => {
+    setHarvestLoading(true)
+    setHarvestError('')
+    try {
+      const records = await getHarvestsApi()
+      setHarvests(records)
+      setFreshnessEdits(records.reduce((acc, record) => ({
+        ...acc,
+        [record.harvestId]: {
+          score: String(record.freshnessScore),
+          status: record.freshnessStatus
+        }
+      }), {} as Record<number, { score: string; status: string }>))
+    } catch (err) {
+      setHarvestError('Failed to load harvest records.')
+    } finally {
+      setHarvestLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
     refresh()
-  }, [refresh])
+    refreshHarvests()
+  }, [refresh, refreshHarvests])
 
   useEffect(() => {
     if (!toast) return
@@ -71,7 +136,7 @@ export default function OwnerDashboard() {
 
   const owner = session.user as Owner
   const pendingOrders = orders.filter((o) => o.status === 'pending')
-  const approvedOrders = orders.filter((o) => o.status === 'approved')
+  const approvedOrders = orders.filter((o) => o.status === 'approved' || o.status === 'partially_approved')
   const sentOrders = orders.filter((o) => o.status === 'sent_to_delivery')
 
   const handleSaveProduct = async (e: FormEvent) => {
@@ -225,6 +290,10 @@ export default function OwnerDashboard() {
             <h3>Awaiting delivery</h3>
             <p>{approvedOrders.length + sentOrders.length}</p>
           </div>
+          <div className="stat-card stat-card--green">
+            <h3>Harvest records</h3>
+            <p>{harvests.length}</p>
+          </div>
         </div>
 
         <nav className="owner-tabs" aria-label="Owner sections">
@@ -233,6 +302,9 @@ export default function OwnerDashboard() {
           </button>
           <button type="button" className={`owner-tab${tab === 'orders' ? ' owner-tab--active' : ''}`} onClick={() => setTab('orders')}>
             📦 Order Requests {pendingOrders.length > 0 && <span className="owner-badge">{pendingOrders.length}</span>}
+          </button>
+          <button type="button" className={`owner-tab${tab === 'harvest' ? ' owner-tab--active' : ''}`} onClick={() => setTab('harvest')}>
+            🌾 Harvest Controls {harvests.length > 0 && <span className="owner-badge">{harvests.length}</span>}
           </button>
           <button type="button" className={`owner-tab${tab === 'delivery' ? ' owner-tab--active' : ''}`} onClick={() => setTab('delivery')}>
             🛵 Delivery Queue
@@ -330,7 +402,9 @@ export default function OwnerDashboard() {
                           <strong>Order #{order.id}</strong>
                           <span className="row-muted"> · {order.submittedAt}</span>
                         </div>
-                        <span className={`owner-status owner-status--${order.status}`}>{order.status}</span>
+                        <span className={`owner-status owner-status--${order.status}`}>
+                          {order.status === 'partially_approved' ? 'Partially Approved' : order.status}
+                        </span>
                       </header>
 
                       <div className="owner-order-card__customer">
@@ -407,25 +481,49 @@ export default function OwnerDashboard() {
                         </div>
                       )}
 
-                      {order.billLines && (
+                      {(order.billLines || order.items.some((i) => i.rejected)) && (
                         <div className="owner-bill">
                           <h4>
-                            Generated Bill — ₹{order.billAmount}
+                            Updated Total — ₹{order.billAmount ?? 0}
                             {order.items.some((i) => i.rejected) && ' (available items only)'}
                           </h4>
-                          <table className="order-table">
-                            <thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
-                            <tbody>
-                              {order.billLines.map((line, i) => (
-                                <tr key={i}>
-                                  <td>{line.itemName}</td>
-                                  <td>{line.quantity} {line.measurement}</td>
-                                  <td>₹{line.unitPrice}</td>
-                                  <td>₹{line.lineTotal}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+
+                          {order.items.some((i) => !i.rejected) && (
+                            <>
+                              <h5>Approved Items</h5>
+                              <table className="order-table">
+                                <thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
+                                <tbody>
+                                  {order.billLines?.map((line, i) => (
+                                    <tr key={i}>
+                                      <td>{line.itemName}</td>
+                                      <td>{line.quantity} {line.measurement}</td>
+                                      <td>₹{line.unitPrice}</td>
+                                      <td>₹{line.lineTotal}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </>
+                          )}
+
+                          {order.items.some((i) => i.rejected) && (
+                            <>
+                              <h5>Rejected Items</h5>
+                              <table className="order-table owner-order-table">
+                                <thead><tr><th>Item</th><th>Qty</th><th>Reason</th></tr></thead>
+                                <tbody>
+                                  {order.items.filter((i) => i.rejected).map((item, i) => (
+                                    <tr key={i} className="owner-order-item--rejected">
+                                      <td>{item.itemName}</td>
+                                      <td>{item.quantity} {item.measurement}</td>
+                                      <td>{item.rejectionReason}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </>
+                          )}
                         </div>
                       )}
 
@@ -451,7 +549,7 @@ export default function OwnerDashboard() {
                         </div>
                       )}
 
-                      {order.status === 'approved' && (
+                      {(order.status === 'approved' || order.status === 'partially_approved') && (
                         <div className="owner-order-card__actions">
                           <button type="button" className="btn-primary" onClick={() => handleSendDelivery(order.id)}>
                             Report to Delivery Boy
@@ -466,44 +564,245 @@ export default function OwnerDashboard() {
           </section>
         )}
 
+        {tab === 'harvest' && (
+          <section className="dashboard-panel owner-panel">
+            <h2>Harvest Controls</h2>
+            <p>Mark harvest stages, update packing and delivery timestamps, and edit freshness scores for tracked crops.</p>
+
+            {harvestLoading && <p className="row-muted">Loading harvest records…</p>}
+            {harvestError && <p className="row-muted">{harvestError}</p>}
+            {!harvestLoading && harvests.length === 0 && <p className="empty-state">No harvest records available right now.</p>}
+
+            {harvests.length > 0 && (
+              <table className="order-table owner-harvest-table">
+                <thead>
+                  <tr>
+                    <th>Crop</th>
+                    <th>Harvested</th>
+                    <th>Packed</th>
+                    <th>Delivery</th>
+                    <th>Freshness</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {harvests.map((harvest) => {
+                    const stageAction = harvest.deliveredTimestamp
+                      ? null
+                      : harvest.shippedTimestamp
+                        ? { label: 'Mark Delivered', stage: 'delivered' }
+                        : { label: 'Start Transit', stage: 'shipped' }
+
+                    const edit = freshnessEdits[harvest.harvestId] ?? {
+                      score: String(harvest.freshnessScore),
+                      status: harvest.freshnessStatus
+                    }
+
+                    return (
+                      <tr key={harvest.harvestId}>
+                        <td>{harvest.cropName}</td>
+                        <td>{new Date(harvest.harvestTimestamp).toLocaleString()}</td>
+                        <td>{harvest.packedTimestamp ? new Date(harvest.packedTimestamp).toLocaleString() : 'Pending'}</td>
+                        <td>{harvest.deliveredTimestamp ? 'Delivered' : harvest.shippedTimestamp ? 'In transit' : 'Pending'}</td>
+                        <td>
+                          <div className="harvest-freshness-grid">
+                            <input
+                              type="number"
+                              className="harvest-input"
+                              min={0}
+                              max={100}
+                              value={edit.score}
+                              onChange={(event) => setFreshnessEdits((prev) => ({
+                                ...prev,
+                                [harvest.harvestId]: { ...edit, score: event.target.value }
+                              }))}
+                            />
+                            <select
+                              className="harvest-input"
+                              value={edit.status}
+                              onChange={(event) => setFreshnessEdits((prev) => ({
+                                ...prev,
+                                [harvest.harvestId]: { ...edit, status: event.target.value }
+                              }))}
+                            >
+                              <option>Very Fresh</option>
+                              <option>Consume Soon</option>
+                              <option>Reduced Freshness</option>
+                            </select>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="owner-actions owner-harvest-actions">
+                            <button
+                              type="button"
+                              className="btn-sm btn-sm--edit"
+                              onClick={async () => {
+                                await updateTimelineApi(harvest.harvestId, 'harvested', new Date().toISOString())
+                                setToast(`Marked ${harvest.cropName} as harvested.`)
+                                refreshHarvests()
+                              }}
+                              disabled={!!harvest.harvestTimestamp}
+                            >
+                              Mark harvested
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-sm btn-sm--edit"
+                              onClick={async () => {
+                                await updateTimelineApi(harvest.harvestId, 'packed', new Date().toISOString())
+                                setToast(`Packing time updated for ${harvest.cropName}.`)
+                                refreshHarvests()
+                              }}
+                              disabled={!harvest.harvestTimestamp || !!harvest.packedTimestamp}
+                            >
+                              Update packing
+                            </button>
+                            {stageAction && (
+                              <button
+                                type="button"
+                                className="btn-sm btn-sm--edit"
+                                onClick={async () => {
+                                  await updateTimelineApi(harvest.harvestId, stageAction.stage, new Date().toISOString())
+                                  setToast(`${stageAction.label} saved for ${harvest.cropName}.`)
+                                  refreshHarvests()
+                                }}
+                              >
+                                {stageAction.label}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="btn-sm btn-sm--danger"
+                              onClick={async () => {
+                                const current = freshnessEdits[harvest.harvestId] ?? { score: String(harvest.freshnessScore), status: harvest.freshnessStatus }
+                                const score = Number(current.score)
+                                if (Number.isNaN(score) || score < 0 || score > 100) {
+                                  setToast('Enter a valid freshness score between 0 and 100.')
+                                  return
+                                }
+                                await updateHarvestApi(harvest.harvestId, {
+                                  freshnessScore: score,
+                                  freshnessStatus: current.status
+                                })
+                                setToast(`Freshness values saved for ${harvest.cropName}.`)
+                                refreshHarvests()
+                              }}
+                            >
+                              Save freshness
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </section>
+        )}
+
         {tab === 'delivery' && (
           <section className="dashboard-panel owner-panel">
             <h2>Delivery Queue</h2>
             <p>Orders approved and reported to delivery partners.</p>
 
-            {deliveries.length === 0 && sentOrders.length === 0 ? (
-              <p className="empty-state">No orders sent to delivery yet.</p>
-            ) : (
-              <div className="owner-order-list">
-                {deliveries.map((d) => (
-                  <article key={d.id} className="owner-order-card">
-                    <header className="owner-order-card__head">
-                      <strong>Delivery #{d.id} — Order #{d.orderId}</strong>
-                      <span className={`owner-status owner-status--sent_to_delivery`}>{d.status}</span>
-                    </header>
-                    <div className="owner-order-card__customer">
-                      <span>👤 {d.customerName}</span>
-                      <span>📍 {d.customerAddress}</span>
-                      <span>📞 {d.customerPhone}</span>
-                      <span>💰 Bill: ₹{d.billAmount}</span>
-                    </div>
-                    <table className="order-table owner-order-table">
-                      <thead><tr><th>Item</th><th>Qty</th><th>Amount</th></tr></thead>
-                      <tbody>
-                        {d.billLines.map((line, i) => (
-                          <tr key={i}>
-                            <td>{line.itemName}</td>
-                            <td>{line.quantity} {line.measurement}</td>
-                            <td>₹{line.lineTotal}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <p className="row-muted" style={{ marginTop: 12 }}>Assigned: {d.assignedAt}</p>
-                  </article>
-                ))}
+            <div className="live-delivery-section">
+              <div className="live-delivery-list">
+                {deliveries.length === 0 && sentOrders.length === 0 ? (
+                  <p className="empty-state">No orders sent to delivery yet.</p>
+                ) : (
+                  deliveries.map((d) => {
+                    const badgeColor =
+                      d.status === 'delivered'
+                        ? '#15803d'
+                        : d.status === 'near_destination'
+                        ? '#22c55e'
+                        : d.status === 'in_transit'
+                        ? '#38bdf8'
+                        : d.status === 'picked_up'
+                        ? '#fb923c'
+                        : '#fbbf24'
+
+                    const nextStatus =
+                      d.status === 'assigned'
+                        ? 'picked_up'
+                        : d.status === 'picked_up'
+                        ? 'in_transit'
+                        : d.status === 'in_transit'
+                        ? 'near_destination'
+                        : d.status === 'near_destination'
+                        ? 'delivered'
+                        : d.status
+
+                    return (
+                      <article key={d.id} className="live-delivery-card">
+                        <div className="live-delivery-card__head">
+                          <div>
+                            <h3>🚚 Order #{d.orderId}</h3>
+                            <p className="live-delivery-subtitle">Delivery Partner: {d.partnerName}</p>
+                          </div>
+                          <span className="live-delivery-badge" style={{ backgroundColor: badgeColor }}>
+                            {d.status.replace('_', ' ')}
+                          </span>
+                        </div>
+
+                        <div className="live-delivery-grid">
+                          <div>
+                            <p className="live-delivery-label">Customer</p>
+                            <p>{d.customerName}</p>
+                          </div>
+                          <div>
+                            <p className="live-delivery-label">Location</p>
+                            <p>{d.currentLat.toFixed(3)}, {d.currentLng.toFixed(3)}</p>
+                          </div>
+                          <div>
+                            <p className="live-delivery-label">ETA</p>
+                            <p>{d.etaMinutes} min</p>
+                          </div>
+                          <div>
+                            <p className="live-delivery-label">Freshness</p>
+                            <p>{d.freshnessScore}% 🌱</p>
+                          </div>
+                        </div>
+
+                        <div className="live-delivery-status-row">
+                          <span>Assigned: {d.assignedAt}</span>
+                          <span>OTP: {d.otpCode}</span>
+                        </div>
+
+                        <div className="owner-order-card__actions" style={{ marginTop: 18 }}>
+                          {d.status !== 'delivered' && (
+                            <button
+                              type="button"
+                              className="btn-primary"
+                              onClick={() => {
+                                const updated = updateDeliveryStatus(d.id, nextStatus)
+                                if (updated) {
+                                  setDeliveries(getDeliveries())
+                                }
+                              }}
+                            >
+                              {d.status === 'assigned'
+                                ? 'Start Pickup'
+                                : d.status === 'picked_up'
+                                ? 'Mark On Route'
+                                : d.status === 'in_transit'
+                                ? 'Mark Near Destination'
+                                : 'Mark Delivered'}
+                            </button>
+                          )}
+                        </div>
+                      </article>
+                    )
+                  })
+                )}
               </div>
-            )}
+
+              <div className="live-delivery-sidebar">
+                {deliveries[0] && <LiveDeliveryMap delivery={deliveries[0]} />}
+                <OwnerAnalyticsPanel orders={orders} products={products} deliveries={deliveries} />
+              </div>
+            </div>
           </section>
         )}
       </div>

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
 import { getSession, type Customer } from '../utils/authStorage'
-import { addOrder } from '../utils/storeStorage'
+import { addOrder, getFreshUnlockProduct, clearFreshUnlockProduct } from '../utils/storeStorage'
 import { submitOrderApi } from '../services/itemService'
 import type { OrderItem, SubmittedOrder } from '../types/order'
 import { ORDER_STATUSES } from '../types/order'
@@ -16,7 +16,12 @@ interface OrderContextValue {
 const OrderContext = createContext<OrderContextValue | null>(null)
 
 export function OrderProvider({ children }: { children: ReactNode }) {
-  const [draftItems, setDraftItems] = useState<OrderItem[]>([])
+  const [draftItems, setDraftItems] = useState<OrderItem[]>(() => {
+    const freshUnlockProduct = getFreshUnlockProduct()
+    if (!freshUnlockProduct) return []
+    clearFreshUnlockProduct()
+    return [{ ...freshUnlockProduct, id: Date.now() }]
+  })
   const [submittedOrders, setSubmittedOrders] = useState<SubmittedOrder[]>([])
   const [submitError, setSubmitError] = useState('')
 
@@ -25,7 +30,18 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const submitOrder = useCallback(async (): Promise<SubmittedOrder | null> => {
-    if (draftItems.length === 0) return null
+    const freshUnlockProduct = getFreshUnlockProduct()
+    const mergedDraftItems = freshUnlockProduct
+      ? draftItems.some(
+          (item) =>
+            item.itemName.trim().toLowerCase() === freshUnlockProduct.itemName.trim().toLowerCase() &&
+            item.measurement === freshUnlockProduct.measurement
+        )
+        ? draftItems
+        : [...draftItems, { ...freshUnlockProduct, id: Date.now() }]
+      : draftItems
+
+    if (mergedDraftItems.length === 0) return null
 
     const session = getSession()
     if (!session || session.role !== 'customer') return null
@@ -33,12 +49,14 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     const customer = session.user as Customer
     setSubmitError('')
 
+    clearFreshUnlockProduct()
+
     const orderPayload = {
       customerEmail: customer.email,
       customerName: customer.name,
       customerPhone: customer.phone,
       customerAddress: customer.address,
-      items: draftItems.map(({ itemName, quantity, measurement }) => ({
+      items: mergedDraftItems.map(({ itemName, quantity, measurement }) => ({
         itemName,
         quantity,
         measurement
@@ -65,7 +83,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     const order: SubmittedOrder = {
       // Prefer the API-issued id so tracking against the server works
       id: apiOrderId ?? storeOrder.id,
-      items: [...draftItems],
+      items: [...mergedDraftItems],
       status: ORDER_STATUSES[0],
       submittedAt: apiSubmittedAt ?? storeOrder.submittedAt
     }

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getItems, isValidApiOrderItem, type ApiOrderItem } from '../../services/itemService'
+import { getSession, type Customer } from '../../utils/authStorage'
+import { getOrdersByCustomer } from '../../utils/storeStorage'
 import '../../styles/owner-dashboard.css'
 
 interface OrderedProductRow {
@@ -42,15 +44,34 @@ export default function ItemsOrderedPage() {
 
   useEffect(() => {
     const load = async () => {
+      let loadedItems: ApiOrderItem[] = []
+      let localItems: ApiOrderItem[] = []
+      const session = getSession()
+
       try {
         const data = await getItems()
-        setItems(data.filter(isValidApiOrderItem))
+        loadedItems = data.filter(isValidApiOrderItem)
         setError('')
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load ordered items.')
-      } finally {
-        setLoading(false)
       }
+
+      if (session && session.role === 'customer') {
+        const customer = session.user as Customer
+        const localOrders = getOrdersByCustomer(customer.email)
+        localItems = localOrders.flatMap((order, orderIndex) =>
+          order.items.map((item, itemIndex) => ({
+            id: Date.now() + orderIndex * 100 + itemIndex,
+            itemName: item.itemName,
+            quantity: item.quantity,
+            measurement: item.measurement,
+            price: 0
+          }))
+        )
+      }
+
+      setItems([...loadedItems, ...localItems])
+      setLoading(false)
     }
 
     load()

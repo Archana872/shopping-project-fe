@@ -15,6 +15,8 @@ const KEYS = {
   notifications: 'freshmart_notifications'
 } as const
 
+const FRESH_UNLOCK_KEY = 'freshUnlockProduct'
+
 const DEFAULT_PRODUCTS: Omit<Product, 'id' | 'updatedAt'>[] = [
   { name: 'Tomato', stock: 50, price: 40, unit: 'kg' },
   { name: 'Onion', stock: 25, price: 30, unit: 'kg' },
@@ -121,6 +123,28 @@ export function getOrders(): StoreOrder[] {
 
 export function getOrdersByCustomer(email: string): StoreOrder[] {
   return getOrders().filter((o) => o.customerEmail.toLowerCase() === email.toLowerCase())
+}
+
+export interface FreshUnlockProduct {
+  itemName: string
+  quantity: number
+  measurement: string
+  price: number
+  freeDelivery?: boolean
+}
+
+export function getFreshUnlockProduct(): FreshUnlockProduct | null {
+  try {
+    const raw = localStorage.getItem(FRESH_UNLOCK_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as FreshUnlockProduct
+  } catch {
+    return null
+  }
+}
+
+export function clearFreshUnlockProduct() {
+  localStorage.removeItem(FRESH_UNLOCK_KEY)
 }
 
 export function addOrder(order: Omit<StoreOrder, 'id' | 'status' | 'submittedAt'>): StoreOrder {
@@ -240,9 +264,10 @@ export function approveOrder(orderId: number): { ok: true; order: StoreOrder } |
   })
   write(KEYS.products, updatedProducts)
 
+  const rejectedCount = order.items.filter((i) => i.rejected).length
   const updatedOrder: StoreOrder = {
     ...order,
-    status: 'approved',
+    status: rejectedCount > 0 ? 'partially_approved' : 'approved',
     billAmount,
     billLines
   }
@@ -252,13 +277,12 @@ export function approveOrder(orderId: number): { ok: true; order: StoreOrder } |
     orders.map((o) => (o.id === orderId ? updatedOrder : o))
   )
 
-  const rejectedCount = order.items.filter((i) => i.rejected).length
   addNotification({
     customerEmail: order.customerEmail,
     orderId: order.id,
     message:
       rejectedCount > 0
-        ? `Order #${order.id} partially approved! Bill total: ₹${billAmount}. ${rejectedCount} unavailable item(s) were removed.`
+        ? `Some items were unavailable and removed. Remaining order approved. Bill total: ₹${billAmount}.`
         : `Order #${order.id} approved! Bill total: ₹${billAmount}. Your order is being prepared.`,
     type: 'approval'
   })
@@ -290,7 +314,7 @@ export function rejectOrder(orderId: number, reason: string): StoreOrder | null 
 export function sendToDelivery(orderId: number): DeliveryAssignment | null {
   const orders = getOrders()
   const order = orders.find((o) => o.id === orderId)
-  if (!order || order.status !== 'approved' || !order.billLines || order.billAmount === undefined) return null
+  if (!order || (order.status !== 'approved' && order.status !== 'partially_approved') || !order.billLines || order.billAmount === undefined) return null
 
   const updatedOrder: StoreOrder = {
     ...order,
@@ -302,17 +326,31 @@ export function sendToDelivery(orderId: number): DeliveryAssignment | null {
     orders.map((o) => (o.id === orderId ? updatedOrder : o))
   )
 
+  const defaultLat = 12.9716
+  const defaultLng = 77.5946
+
   const assignment: DeliveryAssignment = {
     id: Date.now(),
     orderId: order.id,
+    partnerName: 'Fresh Rider',
+    partnerPhone: '999-999-9999',
     customerName: order.customerName,
+    customerEmail: order.customerEmail,
     customerAddress: order.customerAddress,
     customerPhone: order.customerPhone,
     billAmount: order.billAmount,
     items: order.items.filter((i) => !i.rejected),
     billLines: order.billLines,
     status: 'assigned',
-    assignedAt: new Date().toLocaleString()
+    assignedAt: new Date().toLocaleString(),
+    currentLat: defaultLat,
+    currentLng: defaultLng,
+    destinationLat: defaultLat + 0.002,
+    destinationLng: defaultLng + 0.0025,
+    etaMinutes: 18,
+    freshnessScore: 96,
+    otpCode: String(Math.floor(100000 + Math.random() * 900000)),
+    arrivalDetected: false
   }
 
   write(KEYS.deliveries, [...getDeliveries(), assignment])
@@ -323,6 +361,14 @@ export function getDeliveries(): DeliveryAssignment[] {
   return read<DeliveryAssignment>(KEYS.deliveries)
 }
 
+export function getDeliveryByOrderId(orderId: number): DeliveryAssignment | undefined {
+  return getDeliveries().find((d) => d.orderId === orderId)
+}
+
+export function getDeliveriesByCustomerEmail(email: string): DeliveryAssignment[] {
+  return getDeliveries().filter((d) => d.customerEmail.toLowerCase() === email.toLowerCase())
+}
+
 export function updateDeliveryStatus(
   deliveryId: number,
   status: DeliveryAssignment['status']
@@ -330,7 +376,91 @@ export function updateDeliveryStatus(
   const deliveries = getDeliveries()
   const idx = deliveries.findIndex((d) => d.id === deliveryId)
   if (idx === -1) return null
-  const updated = { ...deliveries[idx], status }
+  const now = new Date().toLocaleString()
+  const updated = {
+    ...deliveries[idx],
+    status,
+    startedAt: status === 'picked_up' ? now : deliveries[idx].startedAt,
+    deliveredAt: status === 'delivered' ? now : deliveries[idx].deliveredAt,
+    etaMinutes: status === 'delivered' ? 0 : Math.max(0, deliveries[idx].etaMinutes - 5)
+  }
+  deliveries[idx] = updated
+  write(KEYS.deliveries, deliveries)
+
+  const message =
+    status === 'picked_up'
+      ? `Your order #${updated.orderId} is picked up by ${updated.partnerName}.`
+      : status === 'in_transit'
+      ? `Your order #${updated.orderId} is on the way to your address.`
+      : status === 'near_destination'
+      ? `Your delivery for order #${updated.orderId} is near your address. OTP: ${updated.otpCode}`
+      : status === 'delivered'
+      ? `Order #${updated.orderId} has been delivered. Enjoy your fresh groceries!`
+      : ''
+
+  if (message) {
+    addNotification({
+      customerEmail: updated.customerEmail,
+      orderId: updated.orderId,
+      message,
+      type: 'delivery'
+    })
+  }
+
+  return updated
+}
+
+export function confirmDeliveryOtp(
+  deliveryId: number,
+  otp: string,
+  proofPhotoUrl?: string
+): DeliveryAssignment | null {
+  const deliveries = getDeliveries()
+  const idx = deliveries.findIndex((d) => d.id === deliveryId)
+  if (idx === -1) return null
+  const current = deliveries[idx]
+  if (current.otpCode !== otp.trim()) return null
+
+  const now = new Date().toLocaleString()
+  const updated: DeliveryAssignment = {
+    ...current,
+    status: 'delivered',
+    deliveredAt: now,
+    etaMinutes: 0,
+    proofPhotoUrl,
+    arrivalDetected: true
+  }
+
+  deliveries[idx] = updated
+  write(KEYS.deliveries, deliveries)
+  addNotification({
+    customerEmail: updated.customerEmail,
+    orderId: updated.orderId,
+    message: `Delivery confirmed for order #${updated.orderId}. Enjoy your fresh groceries!`,
+    type: 'delivery'
+  })
+  return updated
+}
+
+export function updateDeliveryCoordinates(
+  deliveryId: number,
+  currentLat: number,
+  currentLng: number,
+  etaMinutes: number,
+  status?: DeliveryAssignment['status'],
+  arrivalDetected?: boolean
+): DeliveryAssignment | null {
+  const deliveries = getDeliveries()
+  const idx = deliveries.findIndex((d) => d.id === deliveryId)
+  if (idx === -1) return null
+  const updated = {
+    ...deliveries[idx],
+    currentLat,
+    currentLng,
+    etaMinutes,
+    status: status ?? deliveries[idx].status,
+    arrivalDetected: arrivalDetected ?? deliveries[idx].arrivalDetected
+  }
   deliveries[idx] = updated
   write(KEYS.deliveries, deliveries)
   return updated

@@ -1,11 +1,38 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useOrders } from '../../context/OrderContext'
+import { getFreshUnlockProduct, clearFreshUnlockProduct } from '../../utils/storeStorage'
 
 export default function NewOrderPage() {
-  const { draftItems, submitOrder, submitError } = useOrders()
+  const { draftItems, submitOrder, submitError, addDraftItem } = useOrders()
   const navigate = useNavigate()
   const [submitting, setSubmitting] = useState(false)
+  const [freshUnlockLoaded, setFreshUnlockLoaded] = useState(false)
+
+  useEffect(() => {
+    if (freshUnlockLoaded) return
+
+    const freshUnlockProduct = getFreshUnlockProduct()
+    if (freshUnlockProduct) {
+      const alreadyAdded = draftItems.some(
+        (item) =>
+          item.itemName.trim().toLowerCase() === freshUnlockProduct.itemName.trim().toLowerCase() &&
+          item.measurement === freshUnlockProduct.measurement
+      )
+
+      if (!alreadyAdded) {
+        addDraftItem({
+          itemName: freshUnlockProduct.itemName,
+          quantity: freshUnlockProduct.quantity,
+          measurement: freshUnlockProduct.measurement
+        })
+      }
+
+      clearFreshUnlockProduct()
+    }
+
+    setFreshUnlockLoaded(true)
+  }, [freshUnlockLoaded, draftItems, addDraftItem])
 
   const handleSubmitOrder = async () => {
     setSubmitting(true)

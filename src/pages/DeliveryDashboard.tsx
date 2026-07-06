@@ -1,14 +1,74 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import StoreNavbar from '../components/StoreNavbar'
+import LiveDeliveryMap from '../components/LiveDeliveryMap'
 import { getSession, type DeliveryBoy } from '../utils/authStorage'
 import { getDeliveries, updateDeliveryStatus } from '../utils/storeStorage'
 import type { DeliveryAssignment } from '../types/store'
 import '../styles/dashboard.css'
 import '../styles/owner-dashboard.css'
+import '../styles/live-delivery.css'
 
 function statusClass(status: DeliveryAssignment['status']) {
   return `owner-status owner-status--${status}`
+}
+
+interface DeliveryAssist {
+  weatherType: 'clear' | 'rain' | 'storm' | 'heat'
+  weatherLabel: string
+  recommendation: string
+  trafficLevel: 'light' | 'moderate' | 'heavy'
+  routeSuggestion: string
+  alertMessage: string
+  adjustedEta: number
+}
+
+function buildDeliveryAssist(delivery: DeliveryAssignment): DeliveryAssist {
+  const seed = Math.round(Math.abs(delivery.currentLat + delivery.currentLng + delivery.orderId)) % 100
+  const weatherType = seed < 30 ? 'rain' : seed < 45 ? 'storm' : seed < 70 ? 'heat' : 'clear'
+  const trafficLevel = delivery.etaMinutes >= 22 ? 'heavy' : delivery.etaMinutes >= 14 ? 'moderate' : 'light'
+  const weatherLabel =
+    weatherType === 'rain'
+      ? 'Rain expected'
+      : weatherType === 'storm'
+      ? 'Storm alert'
+      : weatherType === 'heat'
+      ? 'Heat advisory'
+      : 'Clear skies'
+  const recommendation =
+    weatherType === 'rain'
+      ? 'Rain expected — drive carefully.'
+      : weatherType === 'storm'
+      ? 'Storm ahead — reduce speed and stay alert.'
+      : weatherType === 'heat'
+      ? 'High heat — keep the delivery fresh and stay hydrated.'
+      : 'Roads are clear, maintain a steady pace.'
+  const routeSuggestion =
+    trafficLevel === 'heavy'
+      ? 'Auto-suggested safer route: use the express ring road.'
+      : weatherType === 'rain'
+      ? 'Follow the inner city route to avoid slick highways.'
+      : 'Stick to the fastest clear route.'
+  const alertMessage =
+    trafficLevel === 'heavy'
+      ? 'High traffic ahead'
+      : weatherType === 'rain'
+      ? 'Rain detected'
+      : weatherType === 'storm'
+      ? 'Storm conditions update'
+      : ''
+  const weatherDelay = weatherType === 'rain' ? 4 : weatherType === 'storm' ? 7 : weatherType === 'heat' ? 2 : 0
+  const trafficDelay = trafficLevel === 'heavy' ? 6 : trafficLevel === 'moderate' ? 3 : 0
+
+  return {
+    weatherType,
+    weatherLabel,
+    recommendation,
+    trafficLevel,
+    routeSuggestion,
+    alertMessage,
+    adjustedEta: Math.max(1, delivery.etaMinutes + weatherDelay + trafficDelay)
+  }
 }
 
 export default function DeliveryDashboard() {
@@ -37,6 +97,8 @@ export default function DeliveryDashboard() {
   const deliveryBoy = session.user as DeliveryBoy
   const inProgress = deliveries.filter((d) => d.status === 'assigned' || d.status === 'in_transit')
   const completed = deliveries.filter((d) => d.status === 'delivered')
+  const activeDelivery = inProgress[0]
+  const deliveryAssist = activeDelivery ? buildDeliveryAssist(activeDelivery) : null
 
   const handleAdvance = (delivery: DeliveryAssignment) => {
     const nextStatus =
@@ -89,6 +151,33 @@ export default function DeliveryDashboard() {
             </div>
           </div>
         </section>
+
+        {activeDelivery && (
+          <section className="dashboard-panel owner-panel">
+            <h2>Live GPS Assist</h2>
+            <p>Weather and traffic guidance for your current delivery route.</p>
+
+            <div className="delivery-assist-grid">
+              <article className={`analytics-card analytics-card--compact weather-card weather-card--${deliveryAssist?.weatherType}`}>
+                <p className="analytics-card__label">Weather alert</p>
+                <h3>{deliveryAssist?.weatherLabel}</h3>
+                <p>{deliveryAssist?.recommendation}</p>
+              </article>
+              <article className="analytics-card analytics-card--compact traffic-card">
+                <p className="analytics-card__label">Traffic assist</p>
+                <h3>{deliveryAssist?.trafficLevel === 'heavy' ? 'Heavy traffic' : deliveryAssist?.trafficLevel === 'moderate' ? 'Moderate traffic' : 'Clear roads'}</h3>
+                <p>{deliveryAssist?.routeSuggestion}</p>
+              </article>
+              <article className="analytics-card analytics-card--compact eta-card">
+                <p className="analytics-card__label">ETA update</p>
+                <h3>{deliveryAssist?.adjustedEta} mins</h3>
+                <p>{deliveryAssist?.alertMessage || 'Delivery conditions are stable.'}</p>
+              </article>
+            </div>
+
+            <LiveDeliveryMap delivery={activeDelivery} assist={deliveryAssist} />
+          </section>
+        )}
 
         <section className="dashboard-panel owner-panel">
           <h2>Assigned Orders</h2>

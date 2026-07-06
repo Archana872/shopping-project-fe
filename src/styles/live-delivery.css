@@ -1,0 +1,311 @@
+/* Live Delivery UI */
+.live-delivery-section {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.live-delivery-card,
+.live-delivery-map-card {
+  background: white;
+  border: 1px solid var(--store-border);
+  border-radius: var(--store-radius-lg);
+  padding: 24px;
+  box-shadow: var(--store-shadow-sm);
+}
+
+.live-delivery-card__head,
+.live-delivery-map-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.live-delivery-card__head h3,
+.live-delivery-map-header h3 {
+  font-size: 1.1rem;
+  margin: 0 0 6px;
+}
+
+.live-delivery-subtitle,
+.live-delivery-label {
+  font-size: 0.95rem;
+  color: var(--store-text-secondary);
+  margin: 0;
+}
+
+.live-delivery-badge,
+.live-delivery-map-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 12px;
+}
+
+.live-delivery-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.live-delivery-grid div {
+  min-width: 0;
+}
+
+.live-delivery-status-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--store-text-secondary);
+  font-size: 0.95rem;
+}
+
+.live-delivery-map-frame {
+  position: relative;
+  min-height: 260px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #f0fdf4 0%, #d1fae5 100%);
+  overflow: hidden;
+}
+
+.map-pin {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: var(--store-shadow-sm);
+  font-size: 22px;
+}
+
+.map-pin--rider {
+  left: 40px;
+  top: 40px;
+  animation: moveRider 8s ease-in-out infinite alternate;
+}
+
+.map-pin--customer {
+  right: 24px;
+  bottom: 28px;
+}
+
+.route-line {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.live-delivery-map-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+  color: var(--store-text-secondary);
+}
+
+.live-delivery-progress {
+  margin-top: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.live-progress-bar {
+  height: 10px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.live-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+  transition: width 0.4s ease;
+}
+
+.live-delivery-card h3,
+.live-delivery-map-card h3 {
+  font-size: 1.1rem;
+}
+
+.live-delivery-card p,
+.live-delivery-map-card p {
+  margin: 0;
+}
+
+.live-delivery-map-label {
+  min-width: 110px;
+}
+
+.live-delivery-status-light {
+  background: #22c55e;
+}
+
+.live-delivery-status-moderate {
+  background: #f97316;
+}
+
+.live-delivery-status-heavy {
+  background: #ef4444;
+}
+
+.delivery-assist-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.analytics-card {
+  background: white;
+  border: 1px solid var(--store-border);
+  border-radius: var(--store-radius-lg);
+  padding: 18px;
+  box-shadow: var(--store-shadow-sm);
+}
+
+.analytics-card__label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  color: var(--store-text-secondary);
+}
+
+.analytics-card h3 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+
+.weather-card {
+  border-color: #60a5fa;
+}
+
+.weather-card--rain {
+  background: #eff6ff;
+}
+
+.weather-card--storm {
+  background: #fef3c7;
+}
+
+.traffic-card {
+  border-color: #fb923c;
+}
+
+.eta-card {
+  border-color: #34d399;
+}
+
+.rain-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.rain-drop {
+  position: absolute;
+  width: 2px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.75);
+  filter: blur(0.5px);
+  animation: rain-fall 1.2s linear infinite;
+}
+
+.rain-drop:nth-child(odd) {
+  animation-duration: 1s;
+}
+
+.rain-drop:nth-child(even) {
+  animation-duration: 1.4s;
+}
+
+.rain-drop:nth-child(1) { left: 12%; top: -20%; animation-delay: 0s; }
+.rain-drop:nth-child(2) { left: 22%; top: -10%; animation-delay: 0.2s; }
+.rain-drop:nth-child(3) { left: 35%; top: -15%; animation-delay: 0.4s; }
+.rain-drop:nth-child(4) { left: 48%; top: -22%; animation-delay: 0.3s; }
+.rain-drop:nth-child(5) { left: 58%; top: -18%; animation-delay: 0.1s; }
+.rain-drop:nth-child(6) { left: 68%; top: -8%; animation-delay: 0.5s; }
+.rain-drop:nth-child(7) { left: 78%; top: -20%; animation-delay: 0.2s; }
+.rain-drop:nth-child(8) { left: 88%; top: -14%; animation-delay: 0.4s; }
+.rain-drop:nth-child(9) { left: 18%; top: -28%; animation-delay: 0.15s; }
+.rain-drop:nth-child(10) { left: 30%; top: -24%; animation-delay: 0.25s; }
+.rain-drop:nth-child(11) { left: 42%; top: -10%; animation-delay: 0.35s; }
+.rain-drop:nth-child(12) { left: 54%; top: -12%; animation-delay: 0.45s; }
+.rain-drop:nth-child(13) { left: 66%; top: -20%; animation-delay: 0.55s; }
+.rain-drop:nth-child(14) { left: 74%; top: -16%; animation-delay: 0.65s; }
+.rain-drop:nth-child(15) { left: 84%; top: -28%; animation-delay: 0.3s; }
+.rain-drop:nth-child(16) { left: 92%; top: -20%; animation-delay: 0.4s; }
+
+@keyframes rain-fall {
+  0% { transform: translateY(0); opacity: 0.85; }
+  100% { transform: translateY(260px); opacity: 0; }
+}
+
+@media (max-width: 980px) {
+  .delivery-assist-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .live-delivery-card,
+  .live-delivery-map-card {
+    padding: 18px;
+  }
+}
+
+.live-notification-banner {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  background: linear-gradient(90deg, #d1fae5, #f0fdf4);
+  border: 1px solid #bbf7d0;
+  border-radius: var(--store-radius-lg);
+  padding: 18px 20px;
+  margin-bottom: 24px;
+}
+
+.live-notification-banner strong {
+  display: block;
+  font-size: 1rem;
+  color: #166534;
+}
+
+.live-notification-banner span {
+  color: var(--store-text-secondary);
+}
+
+@keyframes moveRider {
+  0% { transform: translate(0, 0); }
+  50% { transform: translate(140px, 120px); }
+  100% { transform: translate(220px, 160px); }
+}
+
+@media (max-width: 960px) {
+  .live-delivery-section {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .live-delivery-grid,
+  .live-delivery-map-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .live-delivery-card,
+  .live-delivery-map-card {
+    padding: 18px;
+  }
+}
