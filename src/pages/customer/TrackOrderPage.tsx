@@ -39,6 +39,8 @@ function toDisplayOrder(o: StoreOrder | ApiOrder): DisplayOrder {
 export default function TrackOrderPage() {
   const [orders, setOrders] = useState<DisplayOrder[]>([])
   const [delivery, setDelivery] = useState<DeliveryAssignment | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  
   const [otpInput, setOtpInput] = useState('')
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [proofPreview, setProofPreview] = useState<string | null>(null)
@@ -48,11 +50,13 @@ export default function TrackOrderPage() {
 
   useEffect(() => {
     if (!proofFile) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setProofPreview(null)
       return
     }
 
     const url = URL.createObjectURL(proofFile)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setProofPreview(url)
     return () => URL.revokeObjectURL(url)
   }, [proofFile])
@@ -92,6 +96,8 @@ export default function TrackOrderPage() {
       } else {
         setDelivery(null)
       }
+      
+      if (active) setIsLoading(false)
     }
 
     loadOrders()
@@ -126,29 +132,64 @@ export default function TrackOrderPage() {
 
   const latestOrder = orders[orders.length - 1]
 
-  return (
-    <section className="dashboard-panel">
-      <h2>Track Order</h2>
-      <p>Follow your order from placement to delivery.</p>
+  if (isLoading) {
+    return (
+      <section className="dashboard-panel" style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ height: '32px', width: '200px', background: '#f1f3f5', borderRadius: '8px', animation: 'pulse 1.5s infinite' }}></div>
+        <div style={{ height: '24px', width: '300px', background: '#f1f3f5', borderRadius: '8px', animation: 'pulse 1.5s infinite' }}></div>
+        <div style={{ height: '400px', width: '100%', background: '#e9ecef', borderRadius: '24px', animation: 'pulse 1.5s infinite', marginTop: '24px' }}></div>
+        <style>{`
+          @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+          }
+        `}</style>
+      </section>
+    )
+  }
 
-      {apiError && <p className="form-error">{apiError}</p>}
+  return (
+    <section className="dashboard-panel" style={{ padding: '0', background: 'transparent', boxShadow: 'none' }}>
+      <div style={{ padding: '0 16px 24px' }}>
+        <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#202124', margin: '0 0 8px' }}>Track Order</h2>
+        <p style={{ color: '#5f6368', margin: 0, fontSize: '1rem' }}>Follow your order from placement to delivery.</p>
+      </div>
+
+      {apiError && <p className="form-error" style={{ margin: '0 16px 16px' }}>{apiError}</p>}
 
       {!latestOrder ? (
-        <p className="empty-state">No submitted orders yet. Create and submit an order first.</p>
+        <div className="empty-state" style={{ background: '#fff', borderRadius: '24px', padding: '64px 24px', textAlign: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', margin: '0 16px' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🛒</div>
+          <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', color: '#202124' }}>No active orders</h3>
+          <p style={{ margin: 0, color: '#5f6368' }}>You haven't placed any orders yet. Once you order, track it here.</p>
+        </div>
       ) : latestOrder.status === 'rejected' ? (
-        <>
+        <div style={{ background: '#fff', borderRadius: '24px', padding: '32px', margin: '0 16px', border: '1px solid #f8d7da', boxShadow: '0 4px 20px rgba(220,53,69,0.05)' }}>
+          <h3 style={{ color: '#dc3545', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>❌</span> Order Cancelled
+          </h3>
           <p className="order-meta">Order #{latestOrder.id} — {latestOrder.submittedAt}</p>
-          <div className="owner-stock-warning" style={{ marginTop: 16 }}>
-            ❌ Order rejected: {latestOrder.rejectionReason}
+          <div style={{ marginTop: 16, padding: '16px', background: '#fdf3f4', borderRadius: '12px', color: '#842029' }}>
+            <strong>Reason:</strong> {latestOrder.rejectionReason}
           </div>
-        </>
+        </div>
       ) : (
-        <>
-          <p className="order-meta">
-            Order #{latestOrder.id} — {latestOrder.submittedAt}
-            {latestOrder.billAmount !== undefined && ` · Bill: ₹${latestOrder.billAmount}`}
-          </p>
-          <div className="track-steps">
+        <div style={{ background: '#fff', borderRadius: '24px', padding: '24px', margin: '0 16px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid #f1f3f5', paddingBottom: '20px', marginBottom: '24px' }}>
+            <div>
+              <p style={{ margin: '0 0 4px', fontSize: '0.85rem', fontWeight: 600, color: '#5f6368', textTransform: 'uppercase' }}>Order ID #{latestOrder.id}</p>
+              <p style={{ margin: 0, fontSize: '0.9rem', color: '#80868b' }}>{latestOrder.submittedAt}</p>
+            </div>
+            {latestOrder.billAmount !== undefined && (
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ margin: '0 0 4px', fontSize: '0.85rem', fontWeight: 600, color: '#5f6368', textTransform: 'uppercase' }}>Total Bill</p>
+                <p style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#1a73e8' }}>₹{latestOrder.billAmount}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="track-steps" style={{ marginBottom: '32px' }}>
             {TRACK_STEPS.map((status) => {
               const current = statusToStep(latestOrder.status)
               const done = TRACK_STEPS.indexOf(status) <= TRACK_STEPS.indexOf(current as (typeof TRACK_STEPS)[number])
@@ -162,77 +203,107 @@ export default function TrackOrderPage() {
               )
             })}
           </div>
-          <p className="status-note">
-            Current status: <strong>{latestOrder.status.replace(/_/g, ' ')}</strong>
-          </p>
 
           {delivery && delivery.orderId === latestOrder.id ? (
-            <div style={{ marginTop: 24 }}>
-              <LiveDeliveryCard delivery={delivery} />
-              <LiveDeliveryMap delivery={delivery} />
-
-              <section className="dashboard-panel" style={{ marginTop: 24 }}>
-                <h3>Delivery confirmation</h3>
-                <p>Enter the OTP shown by your rider and optionally upload a delivery proof image.</p>
-
-                {verificationError && <p className="form-error">{verificationError}</p>}
-                {confirmationMessage && <p className="success-text">{confirmationMessage}</p>}
-
-                {delivery.status !== 'delivered' ? (
-                  <div style={{ display: 'grid', gap: 16, marginTop: 18 }}>
-                    <div>
-                      <label htmlFor="deliveryOtp">Delivery OTP</label>
-                      <input
-                        id="deliveryOtp"
-                        type="text"
-                        value={otpInput}
-                        onChange={(e) => setOtpInput(e.target.value)}
-                        placeholder="Enter OTP from rider"
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="proofUpload">Delivery proof (optional)</label>
-                      <input
-                        id="proofUpload"
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          setProofFile(file ?? null)
-                        }}
-                      />
-                    </div>
-
-                    {proofPreview && (
-                      <div>
-                        <p style={{ marginBottom: 8 }}>Preview</p>
-                        <img
-                          src={proofPreview}
-                          alt="Delivery proof preview"
-                          style={{ borderRadius: 12, maxWidth: '100%', display: 'block', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}
-                        />
-                      </div>
-                    )}
-
-                    <button type="button" className="btn-primary" onClick={handleConfirmOtp}>
-                      Confirm Delivery
-                    </button>
-                  </div>
-                ) : (
-                  <div className="empty-state" style={{ marginTop: 12 }}>
-                    Delivery confirmed. Thank you for using FreshMart.
-                  </div>
-                )}
-              </section>
+            <div style={{ position: 'relative', width: '100%', height: '70vh', minHeight: '500px', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 8px 30px rgba(0,0,0,0.08)' }}>
+              {/* Full bleed map background */}
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+                <LiveDeliveryMap delivery={delivery} />
+              </div>
+              
+              {/* Glassmorphic overlay panel */}
+              <div style={{ 
+                position: 'absolute', 
+                bottom: '24px', 
+                left: '24px', 
+                right: '24px', 
+                display: 'flex', 
+                justifyContent: 'center',
+                pointerEvents: 'none' // Let clicks pass through except on the card itself
+              }}>
+                <LiveDeliveryCard delivery={delivery} />
+              </div>
             </div>
           ) : latestOrder.status === 'sent_to_delivery' ? (
-            <div className="empty-state" style={{ marginTop: 24 }}>
-              Your order has been sent to delivery. Live tracking will appear once the rider begins the route.
+            <div style={{ padding: '40px', background: '#f8f9fa', borderRadius: '16px', textAlign: 'center' }}>
+              <div style={{ fontSize: '40px', marginBottom: '16px', animation: 'bounce 2s infinite' }}>🛵</div>
+              <h4 style={{ margin: '0 0 8px', fontSize: '1.1rem', color: '#202124' }}>Waiting for Rider</h4>
+              <p style={{ margin: 0, color: '#5f6368' }}>Your order has been sent to delivery. Live tracking will appear once a rider is assigned.</p>
+              <style>{`
+                @keyframes bounce {
+                  0%, 100% { transform: translateY(0); }
+                  50% { transform: translateY(-10px); }
+                }
+              `}</style>
             </div>
           ) : null}
-        </>
+
+          {/* Delivery Confirmation block (OTP) */}
+          {delivery && delivery.orderId === latestOrder.id && (
+            <div style={{ marginTop: '32px', background: '#f8f9fa', padding: '24px', borderRadius: '16px', border: '1px solid #e9ecef' }}>
+              <h3 style={{ margin: '0 0 8px', fontSize: '1.1rem', color: '#202124' }}>Confirm Delivery</h3>
+              <p style={{ margin: '0 0 20px', color: '#5f6368', fontSize: '0.9rem' }}>Enter the OTP provided by the rider or confirm with proof.</p>
+
+              {verificationError && <p className="form-error" style={{ marginBottom: '16px' }}>{verificationError}</p>}
+              {confirmationMessage && <p className="success-text" style={{ marginBottom: '16px', color: '#137333', background: '#e6f4ea', padding: '12px', borderRadius: '8px' }}>{confirmationMessage}</p>}
+
+              {delivery.status !== 'delivered' ? (
+                <div style={{ display: 'grid', gap: '20px' }}>
+                  <div>
+                    <label htmlFor="deliveryOtp" style={{ fontWeight: 600, color: '#495057', display: 'block', marginBottom: '8px' }}>Delivery OTP</label>
+                    <input
+                      id="deliveryOtp"
+                      type="text"
+                      className="auth-input"
+                      value={otpInput}
+                      onChange={(e) => setOtpInput(e.target.value)}
+                      placeholder="Enter the 4-digit PIN"
+                      style={{ fontSize: '1.2rem', letterSpacing: '2px', padding: '12px' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="proofUpload" style={{ fontWeight: 600, color: '#495057', display: 'block', marginBottom: '8px' }}>Upload Proof (Optional)</label>
+                    <input
+                      id="proofUpload"
+                      type="file"
+                      accept="image/*"
+                      className="auth-input"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        setProofFile(file ?? null)
+                      }}
+                    />
+                  </div>
+
+                  {proofPreview && (
+                    <div>
+                      <img
+                        src={proofPreview}
+                        alt="Preview"
+                        style={{ borderRadius: '12px', maxHeight: '150px', objectFit: 'cover', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}
+                      />
+                    </div>
+                  )}
+
+                  <button type="button" className="btn-primary" onClick={handleConfirmOtp} style={{ padding: '14px', fontSize: '1rem', borderRadius: '12px' }}>
+                    Verify & Complete Delivery
+                  </button>
+                </div>
+              ) : (
+                <div style={{ background: '#e6f4ea', color: '#137333', padding: '16px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '24px' }}>✅</span>
+                  <div>
+                    <strong>Delivery Confirmed</strong>
+                    <p style={{ margin: 0, fontSize: '0.9rem' }}>Thank you for using FreshMart!</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </section>
   )
 }
+

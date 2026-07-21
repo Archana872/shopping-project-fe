@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useOrders } from '../../context/OrderContext'
 import { createItem } from '../../services/itemService'
 import { MEASUREMENTS } from '../../types/order'
 
 export default function MyOrderPage() {
   const { draftItems, submittedOrders, addDraftItem } = useOrders()
+  const navigate = useNavigate()
 
   const [itemName, setItemName] = useState('')
   const [quantity, setQuantity] = useState('')
@@ -48,6 +50,7 @@ export default function MyOrderPage() {
       setItemName('')
       setQuantity('')
       setMeasurement(MEASUREMENTS[0])
+      navigate('/customer/new-order')
     } catch (err: any) {
       setFormError(err?.message || 'Network error while adding item.')
     }
