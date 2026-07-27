@@ -1,11 +1,13 @@
-import { useMemo } from 'react'
+import React, { useMemo, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import type { DeliveryAssignment } from '../types/store'
 
 interface AssistData {
   weatherType: 'clear' | 'rain' | 'storm' | 'heat'
-  adjustedEta: number
   trafficLevel: 'light' | 'moderate' | 'heavy'
+  routeSuggestion: string
+  adjustedEta: number
+  alertMessage: string
 }
 
 interface Props {
@@ -15,9 +17,25 @@ interface Props {
 }
 
 export default function LiveDeliveryMap({ delivery, assist, className = '' }: Props) {
-  const eta = assist?.adjustedEta ?? delivery.etaMinutes
-  const progress = Math.min(100, Math.max(0, 100 - eta * 4))
-  const trafficColor = assist?.trafficLevel === 'heavy' ? '#ea4335' : assist?.trafficLevel === 'moderate' ? '#fbbc04' : '#34a853'
+  // Calculate the base progress from ETA
+  const baseProgress = Math.max(0, Math.min(100, 100 - (delivery.etaMinutes / 30) * 100))
+  
+  // Rapid live tracker simulation state
+  const [progress, setProgress] = useState(baseProgress)
+
+  useEffect(() => {
+    // Continuously advance the progress quickly to simulate real-time live tracking
+    const interval = setInterval(() => {
+      setProgress(prev => {
+        if (prev >= 100) return 0 // Loop for continuous demo effect
+        return prev + 0.3 // Drives forward smoothly
+      })
+    }, 30) // 30ms for 33fps smooth animation
+    
+    return () => clearInterval(interval)
+  }, [])
+
+
   const isRain = assist?.weatherType === 'rain' || assist?.weatherType === 'storm'
 
   const raindrops = useMemo(() => {
@@ -56,7 +74,11 @@ export default function LiveDeliveryMap({ delivery, assist, className = '' }: Pr
       overflow: 'hidden'
     }}>
       {/* Realistic SVG Map Background */}
-      <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid slice">
+      <svg 
+        viewBox="0 0 1000 600" 
+        style={{ width: '100%', height: '100%', display: 'block' }} 
+        preserveAspectRatio="xMidYMid meet"
+      >
         <defs>
           <pattern id="grid" width="80" height="80" patternUnits="userSpaceOnUse">
             <path d="M 80 0 L 0 0 0 80" fill="none" stroke="#e0e0e0" strokeWidth="1" opacity="0.6" />
@@ -68,81 +90,96 @@ export default function LiveDeliveryMap({ delivery, assist, className = '' }: Pr
             <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.15" />
           </filter>
         </defs>
-        <rect width="100%" height="100%" fill="#ebebf0" />
-        <rect width="100%" height="100%" fill="url(#grid)" />
+        <rect width="100%" height="100%" fill="#f2f2f4" />
         
-        {/* Terrain Details: Parks & Water */}
-        {/* River */}
-        <path d="M 0 100 Q 300 200 600 50 T 1000 150 L 1000 0 L 0 0 Z" fill="#aadaff" opacity="0.8" />
-        <path d="M 0 500 Q 400 450 800 600 L 0 600 Z" fill="#c5e1a5" opacity="0.6" />
-        
-        {/* City Blocks */}
-        <rect x="150" y="200" width="180" height="120" rx="4" fill="#f8f9fa" stroke="#e9ecef" strokeWidth="1" />
-        <rect x="380" y="220" width="220" height="180" rx="4" fill="#f8f9fa" stroke="#e9ecef" strokeWidth="1" />
-        <rect x="100" y="380" width="240" height="100" rx="4" fill="#f8f9fa" stroke="#e9ecef" strokeWidth="1" />
-        <rect x="650" y="300" width="200" height="240" rx="4" fill="#f8f9fa" stroke="#e9ecef" strokeWidth="1" />
-        <rect x="680" y="80" width="160" height="150" rx="16" fill="#c5e1a5" opacity="0.7" />
-        
-        {/* Main Roads */}
-        <path d="M -50 250 Q 400 300 1050 200" fill="none" stroke="#ffffff" strokeWidth="28" strokeLinecap="round" />
-        <path d="M -50 250 Q 400 300 1050 200" fill="none" stroke="#f1f3f4" strokeWidth="26" strokeLinecap="round" />
-        
-        <path d="M 350 -50 L 400 650" fill="none" stroke="#ffffff" strokeWidth="24" strokeLinecap="round" />
-        <path d="M 350 -50 L 400 650" fill="none" stroke="#f1f3f4" strokeWidth="22" strokeLinecap="round" />
-        
-        <path d="M 650 -50 L 600 650" fill="none" stroke="#ffffff" strokeWidth="20" strokeLinecap="round" />
-        <path d="M 650 -50 L 600 650" fill="none" stroke="#f1f3f4" strokeWidth="18" strokeLinecap="round" />
+        {/* House / Building Blocks scattered in the background to mimic residential area */}
+        <g fill="#e4e4e8">
+          <rect x="250" y="100" width="30" height="40" rx="2" transform="rotate(15 250 100)" />
+          <rect x="290" y="110" width="30" height="40" rx="2" transform="rotate(15 290 110)" />
+          <rect x="330" y="120" width="30" height="40" rx="2" transform="rotate(15 330 120)" />
+          
+          <rect x="230" y="160" width="30" height="40" rx="2" transform="rotate(15 230 160)" />
+          <rect x="270" y="170" width="30" height="40" rx="2" transform="rotate(15 270 170)" />
+          
+          <rect x="500" y="100" width="40" height="40" rx="4" />
+          <rect x="550" y="100" width="40" height="40" rx="4" />
+          
+          <rect x="700" y="180" width="20" height="30" rx="2" transform="rotate(-20 700 180)" />
+          <rect x="730" y="170" width="20" height="30" rx="2" transform="rotate(-20 730 170)" />
+          <rect x="760" y="160" width="20" height="30" rx="2" transform="rotate(-20 760 160)" />
+          
+          <rect x="420" y="400" width="35" height="35" rx="3" />
+          <rect x="470" y="400" width="35" height="35" rx="3" />
+          
+          {/* Larger complex building */}
+          <path d="M 120 300 L 160 280 L 180 320 L 140 340 Z" />
+          <path d="M 650 400 L 700 380 L 720 430 L 670 450 Z" />
+        </g>
+
+        {/* Minimal Main Roads intersecting */}
+        <path d="M -50 250 Q 400 300 1050 200" fill="none" stroke="#ffffff" strokeWidth="24" strokeLinecap="round" />
+        <path d="M 350 -50 L 400 650" fill="none" stroke="#ffffff" strokeWidth="20" strokeLinecap="round" />
+        <path d="M 650 -50 L 600 650" fill="none" stroke="#ffffff" strokeWidth="18" strokeLinecap="round" />
 
         {/* The Exact Delivery Route Path */}
         <path 
-          d="M 200 200 C 400 200, 500 400, 800 250" 
+          d="M 200 200 L 360 200 Q 380 200, 380 220 L 380 280 Q 380 300, 400 300 L 600 300 Q 620 300, 620 280 L 620 270 Q 620 250, 640 250 L 800 250" 
           fill="none" 
-          stroke="#4285f4" // Google Blue for route background
-          strokeWidth="8" 
+          stroke="#1a73e8" // Solid blue for Zomato-style route background
+          strokeWidth="6" 
           strokeLinecap="round"
+          strokeLinejoin="round"
           opacity="0.3"
         />
         
         {/* Active Route highlighting (progress) */}
         <path 
-          d="M 200 200 C 400 200, 500 400, 800 250" 
+          d="M 200 200 L 360 200 Q 380 200, 380 220 L 380 280 Q 380 300, 400 300 L 600 300 Q 620 300, 620 280 L 620 270 Q 620 250, 640 250 L 800 250" 
           fill="none" 
-          stroke={trafficColor} 
-          strokeWidth="8" 
+          stroke="#1a73e8" // Solid prominent blue like Zomato
+          strokeWidth="6" 
           strokeLinecap="round"
-          strokeDasharray="24 16"
-          style={{ animation: 'dash-flow 1s linear infinite' }}
+          strokeLinejoin="round"
+          pathLength="100"
+          strokeDasharray="100" 
+          strokeDashoffset={100 - progress} 
+          style={{ transition: 'none' }} // Handled smoothly by 30ms interval
         />
 
-        {/* Origin / Store Pin */}
-        <g transform="translate(200, 200)" filter="url(#soft-shadow)">
-          <circle cx="0" cy="0" r="14" fill="#000" stroke="#fff" strokeWidth="2" />
-          <rect x="-4" y="-4" width="8" height="8" fill="#fff" />
+        {/* Origin / Store */}
+        <g transform="translate(200, 200)">
+          <circle cx="0" cy="0" r="16" fill="#1a73e8" stroke="#fff" strokeWidth="4" />
+          <rect x="-45" y="-42" width="90" height="24" rx="4" fill="#fff" opacity="0.9" />
+          <text x="0" y="-25" fontSize="14" fontWeight="bold" fill="#1a73e8" textAnchor="middle">🏪 Store</text>
         </g>
 
         {/* Destination / Customer Pin */}
         <g transform="translate(800, 250)" filter="url(#shadow)">
-          {/* GMaps style teardrop marker */}
-          <path d="M0 0 C -16 -16, -16 -32, 0 -48 C 16 -32, 16 -16, 0 0 Z" fill="#ea4335" />
-          <circle cx="0" cy="-32" r="6" fill="#7a140b" opacity="0.4" />
-          <circle cx="0" cy="-32" r="5" fill="#fff" />
+          {/* Black teardrop marker (scaled up by ~1.5x) */}
+          <path d="M0 0 C -24 -24, -24 -48, 0 -72 C 24 -48, 24 -24, 0 0 Z" fill="#111" />
+          {/* Little house icon inside the pin (scaled up) */}
+          <path d="M -10.5 -45 L 0 -57 L 10.5 -45 V -33 H -10.5 Z" fill="none" stroke="#fff" strokeWidth="2" strokeLinejoin="round" />
+          <path d="M -3 -33 V -40 H 3 V -33" fill="none" stroke="#fff" strokeWidth="2" strokeLinejoin="round" />
+          {/* Small dot at the base */}
+          <circle cx="0" cy="6" r="3" fill="#111" opacity="0.3" />
+          {/* Label for Customer */}
+          <rect x="-50" y="-106" width="100" height="24" rx="4" fill="#fff" opacity="0.9" />
+          <text x="0" y="-89" fontSize="14" fontWeight="bold" fill="#111" textAnchor="middle">📍 Customer</text>
         </g>
 
         {/* Dynamic Vehicle Tracking Pin */}
         <g 
           filter="url(#shadow)"
           style={{ 
-            offsetPath: 'path("M 200 200 C 400 200, 500 400, 800 250")',
+            offsetPath: 'path("M 200 200 L 360 200 Q 380 200, 380 220 L 380 280 Q 380 300, 400 300 L 600 300 Q 620 300, 620 280 L 620 270 Q 620 250, 640 250 L 800 250")',
             offsetDistance: `${progress}%`,
-            transition: 'offset-distance 2s linear',
-          } as CSSProperties & { offsetPath?: string; offsetDistance?: string }}
+            offsetRotate: 'auto',
+            transition: 'none', // Removed 2s transition since we animate at 30ms
+          } as CSSProperties & { offsetPath?: string; offsetDistance?: string; offsetRotate?: string }}
         >
-          {/* Vehicle icon / dot */}
-          <circle cx="0" cy="0" r="24" fill="#fff" stroke={trafficColor} strokeWidth="4" />
-          <circle cx="0" cy="0" r="6" fill={trafficColor} />
-          <text x="0" y="6" fontSize="20" textAnchor="middle" opacity="0">🚚</text> 
-          {/* We replace the text emoji with a sleeker car-like visual, but keeping a subtle visual */}
-          <circle cx="0" cy="0" r="18" fill="none" stroke={trafficColor} strokeWidth="1" strokeDasharray="4 2" style={{ animation: 'spin 4s linear infinite' }} />
+          {/* White circle background for visibility */}
+          <circle cx="0" cy="0" r="16" fill="#fff" stroke="#1a73e8" strokeWidth="2" />
+          <text x="0" y="5" fontSize="18" textAnchor="middle" style={{ transform: 'rotate(90deg)' }}>🛵</text> 
         </g>
       </svg>
 
